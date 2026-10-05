@@ -3,3 +3,5 @@ dist/
 .vercel
 
 .vercel
+# Private recommendations: generated in CI, served only behind the password
+public/picks/

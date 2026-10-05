@@ -1,29 +1,46 @@
 <template>
-  <div v-if="error" class="text-ink-red-6">{{ error }}</div>
-  <div v-else-if="!s" class="text-ink-gray-5">Loading…</div>
-  <div v-else class="space-y-10">
-    <section class="max-w-3xl">
-      <h1 class="text-3xl font-semibold tracking-tight text-ink-gray-9">Do members of Congress beat the market?</h1>
-      <p class="mt-3 text-lg text-ink-gray-7 leading-relaxed">
-        Not on average, and not in a way you could copy. Across
-        <strong class="text-ink-gray-9">{{ num(s.study.sample.n_trades) }} disclosed stock trades</strong> by
-        {{ s.study.sample.n_members }} members since 2014, buying what Congress buys would have returned
-        <strong class="text-ink-gray-9">{{ pct(filing.ann_return) }} a year</strong> against
-        {{ pct(spy.ann_return) }} for the S&amp;P 500, with no statistically meaningful edge after adjusting for
-        risk factors.
+  <ErrorState v-if="error" :message="error" />
+  <div v-else-if="!s" class="space-y-8" aria-busy="true">
+    <div class="space-y-3 max-w-3xl"><Skeleton class="h-8 w-3/4 rounded-2" /><Skeleton class="h-4 w-full rounded-2" /><Skeleton class="h-4 w-5/6 rounded-2" /></div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3"><Skeleton v-for="i in 4" :key="i" class="h-24 rounded-lg" /></div>
+    <Skeleton class="h-80 rounded-lg" />
+  </div>
+  <div v-else class="space-y-12">
+    <!-- Hero: the answer, then the three things a visitor can do. -->
+    <section>
+      <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+        {{ num(s.study.sample.n_trades) }} disclosed stock trades · {{ s.study.sample.n_members }} members · 2014 to {{ s.data_through.slice(0, 4) }}
+      </div>
+      <h1 class="mt-2 text-3xl md:text-4xl font-semibold tracking-tight text-ink-gray-9 max-w-3xl">Do members of Congress beat the market?</h1>
+      <p class="mt-3 text-lg text-ink-gray-7 leading-relaxed max-w-3xl">
+        Not on average, and not in a way you could copy. Buying what Congress buys, the day it is disclosed, would have
+        returned <strong class="text-ink-gray-9">{{ pct(filing.ann_return) }} a year</strong> against
+        {{ pct(spy.ann_return) }} for the S&amp;P 500, with no statistically meaningful edge after adjusting for risk.
+        But averages hide a lot. Look up any member, see what was just disclosed, or size a copy trade to your own risk.
       </p>
+      <div class="mt-6 grid sm:grid-cols-3 gap-3">
+        <router-link v-for="c in ctas" :key="c.to" :to="c.to"
+          class="group rounded-lg border border-outline-gray-2 p-4 hover:border-outline-gray-4 hover:bg-surface-gray-1 transition-colors">
+          <div class="text-2xl" aria-hidden="true">{{ c.icon }}</div>
+          <div class="mt-2 font-semibold text-ink-gray-9 group-hover:underline">{{ c.title }}</div>
+          <div class="mt-1 text-sm text-ink-gray-6">{{ c.sub }}</div>
+        </router-link>
+      </div>
     </section>
 
-    <CoverageNote class="max-w-3xl" />
-
-    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <StatTile label="Copying at disclosure" :value="`${pct(filing.ann_return)} / yr`"
-        :sub="`Factor alpha ${signedPct(filingReg.alpha_ann)} (t = ${tstat(filingReg.alpha_t)})`" />
-      <StatTile label="Members' own timing" :value="`${pct(trade.ann_return)} / yr`"
-        :sub="`Factor alpha ${signedPct(tradeReg.alpha_ann)} (t = ${tstat(tradeReg.alpha_t)})`" />
-      <StatTile label="S&P 500 (SPY)" :value="`${pct(spy.ann_return)} / yr`" :sub="`${s.study.window.start.slice(0, 4)}–${s.study.window.end.slice(0, 4)}`" />
-      <StatTile label="Median disclosure delay" :value="`${s.study.sample.median_delay_days} days`"
-        :sub="`${pct(s.study.sample.pct_filed_late_over_45d, 0)} filed after the 45-day deadline`" />
+    <section>
+      <h2 class="text-xl font-semibold text-ink-gray-9">The headline numbers</h2>
+      <p class="mt-1 text-sm text-ink-gray-5">Every disclosed purchase held six months, equal-weighted, {{ s.study.window.start.slice(0, 4) }}–{{ s.study.window.end.slice(0, 4) }}. Alpha is what's left after the Fama-French 5 + momentum factors.</p>
+      <div class="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatTile label="Copying at disclosure" :value="`${pct(filing.ann_return)} / yr`"
+          :sub="`Alpha ${signedPct(filingReg.alpha_ann)} (t = ${tstat(filingReg.alpha_t)}): not distinguishable from zero`" />
+        <StatTile label="Members' own timing" :value="`${pct(trade.ann_return)} / yr`"
+          :sub="`Alpha ${signedPct(tradeReg.alpha_ann)} (t = ${tstat(tradeReg.alpha_t)}): no edge even before disclosure`" />
+        <StatTile label="S&P 500 (SPY)" :value="`${pct(spy.ann_return)} / yr`" sub="The benchmark over the same days" />
+        <StatTile label="Median disclosure delay" :value="`${s.study.sample.median_delay_days} days`"
+          :sub="`${pct(s.study.sample.pct_filed_late_over_45d, 0)} filed after the 45-day deadline`" />
+      </div>
+      <CoverageNote class="mt-3 max-w-3xl" />
     </section>
 
     <section class="rounded-lg border border-outline-gray-2 p-4">
@@ -38,13 +55,11 @@
     <section>
       <h2 class="text-xl font-semibold text-ink-gray-9">Member by member</h2>
       <p class="mt-2 text-ink-gray-7 max-w-3xl leading-relaxed">
-        {{ s.members_with_verdict }} members made enough stock purchases to judge. Measured on their own
-        timing, <strong class="text-ink-gray-9">{{ vc.beat + vc.beat_significant }} beat SPY and
-        {{ vc.lagged + vc.lagged_significant }} trailed it</strong>. That is about the split you'd expect from
-        a coin flip. {{ s.significant_unadjusted.trade }} look "statistically significant" on their own,
-        but about {{ s.expected_by_chance }} would by pure luck at that threshold. After correcting for testing
-        {{ s.members_with_verdict }} members at once, <strong class="text-ink-gray-9">{{ vc.beat_significant }}
-        beat the market by more than luck explains</strong>.
+        {{ s.members_with_verdict }} members made enough stock purchases to judge. On their own timing,
+        <strong class="text-ink-gray-9">{{ vc.beat + vc.beat_significant }} beat SPY and {{ vc.lagged + vc.lagged_significant }} trailed it</strong>,
+        about the split a coin flip gives. {{ s.significant_unadjusted.trade }} look "statistically significant" alone, but roughly
+        {{ s.expected_by_chance }} would by luck at that threshold. After correcting for testing {{ s.members_with_verdict }} members at once,
+        <strong class="text-ink-gray-9">{{ vc.beat_significant }} beat the market by more than luck explains</strong>.
       </p>
       <div class="mt-4 grid sm:grid-cols-2 gap-3">
         <div class="rounded-lg border border-outline-gray-2 p-4">
@@ -56,13 +71,16 @@
           <MiniBoard :members="bottom" class="mt-2" />
         </div>
       </div>
-      <div class="mt-3"><Button route="/members" label="See all members →" /></div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <Button route="/members" label="See all members →" />
+        <Button variant="ghost" route="/members?view=filing" label="Rank by what a copier earned" />
+      </div>
     </section>
 
-    <section class="grid lg:grid-cols-2 gap-6">
+    <section class="grid lg:grid-cols-2 gap-8">
       <div>
         <h2 class="text-xl font-semibold text-ink-gray-9">Most-bought stocks, last 12 months</h2>
-        <p class="text-sm text-ink-gray-5 mt-1">Ranked by number of different members buying.</p>
+        <p class="text-sm text-ink-gray-5 mt-1">Ranked by how many different members bought.</p>
         <table class="mt-3 w-full text-base">
           <thead><tr class="text-left text-sm text-ink-gray-5 border-b border-outline-gray-2">
             <th class="py-2 font-normal">Ticker</th><th class="py-2 font-normal">Company</th>
@@ -95,11 +113,12 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { Badge, Button } from 'frappe-ui'
+import { Badge, Button, Skeleton } from 'frappe-ui'
 import StatTile from '../components/StatTile.vue'
 import GrowthChart from '../components/GrowthChart.vue'
 import MiniBoard from '../components/MiniBoard.vue'
 import CoverageNote from '../components/CoverageNote.vue'
+import ErrorState from '../components/ErrorState.vue'
 import { getMembers, getSummary } from '../lib/data'
 import { date, num, pct, signedPct, tstat } from '../lib/format'
 
@@ -110,6 +129,11 @@ onMounted(async () => {
   try { [s.value, members.value] = await Promise.all([getSummary(), getMembers()]) } catch (e) { error.value = e.message }
 })
 
+const ctas = [
+  { to: '/members', icon: '🏛️', title: 'Look up a member', sub: 'Did their picks beat the market? Could you have profited by copying them?' },
+  { to: '/trades', icon: '🕒', title: 'See the latest trades', sub: 'What was just disclosed, and the most to put in at your risk level.' },
+  { to: '/other', icon: '📄', title: 'Options, bonds & funds', sub: 'Everything that isn\'t common stock, including the famous options trades.' },
+]
 const trade = computed(() => s.value.study.summary.trade_date)
 const filing = computed(() => s.value.study.summary.filing_date)
 const spy = computed(() => s.value.study.summary.spy)

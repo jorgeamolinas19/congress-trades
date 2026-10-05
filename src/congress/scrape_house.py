@@ -43,7 +43,10 @@ STATUS_RE = re.compile(r"F(?:ILING)?\s*S(?:TATUS)?\s*:", re.I)
 
 def load_index(year: int) -> pd.DataFrame:
     path = INDEX / f"{year}FD.zip"
-    if not path.exists():
+    # Recent years' indexes grow daily (and late filings land in the prior
+    # year's index), so re-download those once they're more than 12 hours old.
+    stale = year >= END_YEAR - 1 and path.exists() and time.time() - path.stat().st_mtime > 12 * 3600
+    if not path.exists() or stale:
         r = requests.get(f"{BASE}/financial-pdfs/{year}FD.zip", timeout=120,
                          headers={"User-Agent": USER_AGENT})
         path.write_bytes(r.content)
@@ -68,6 +71,24 @@ def _fetch(year: int, doc: str) -> bytes | None:
             pass
         time.sleep(2 ** attempt)
     return None
+
+
+PARSED = INTERIM / "house_parsed"
+PARSED.mkdir(parents=True, exist_ok=True)
+PARSER_VERSION = 3  # bump when parse_ptr_text changes, to re-parse every cached PDF
+
+
+def parse_cached(doc: str, content: bytes) -> list[dict]:
+    """Parsed transactions for one PDF, cached as JSON keyed by parser version."""
+    import json
+    path = PARSED / f"{doc}.json"
+    if path.exists():
+        cached = json.loads(path.read_text(encoding="utf-8"))
+        if cached.get("v") == PARSER_VERSION:
+            return cached["rows"]
+    rows = parse_ptr_text(pdf_text(content))
+    path.write_text(json.dumps({"v": PARSER_VERSION, "rows": rows}), encoding="utf-8")
+    return rows
 
 
 def pdf_text(content: bytes) -> str:
@@ -135,7 +156,7 @@ def run(cached_only: bool = False) -> pd.DataFrame:
             status.append((f.DocID, "download_failed", 0))
             continue
         try:
-            txs = parse_ptr_text(pdf_text(content))
+            txs = parse_cached(f.DocID, content)
         except Exception as e:  # malformed PDF
             status.append((f.DocID, f"parse_error:{type(e).__name__}", 0))
             continue

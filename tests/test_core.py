@@ -244,3 +244,20 @@ def test_outcome_stats_percentiles_and_ci():
     out = outcome_stats(ret, ret, pd.Series(np.arange(101) % 10))
     assert out["n"] == 101 and out["return_percentiles"]["p50"] == pytest.approx(0.0)
     assert out["hit_ci"][0] < out["hit_rate"] < out["hit_ci"][1]
+
+
+def test_member_odds_use_only_outcomes_known_before_the_decision():
+    from congress.recs import add_member_odds
+    d = pd.Timestamp
+    hist = pd.DataFrame({
+        "member": ["m"] * 3,
+        "filing_date": [d("2020-01-01"), d("2020-02-01"), d("2020-03-01")],
+        "outcome_known": [d("2020-07-01"), d("2020-08-01"), d("2020-09-01")],
+        "excess_6m": [0.10, 0.10, 0.10],          # all winners
+    })
+    decisions = pd.DataFrame({"member": ["m"] * 3,
+                              "entry_date": [d("2020-06-15"), d("2020-08-15"), d("2021-01-01")]})
+    o = add_member_odds(decisions, hist, p=0.5, k=10, unit_var=0.25)
+    assert o.iloc[0] == pytest.approx(0.5)                   # nothing known yet -> prior
+    assert o.iloc[1] == pytest.approx((2 * 1 + 10 * 0.5) / 12)  # two outcomes known
+    assert o.iloc[2] == pytest.approx((3 * 1 + 10 * 0.5) / 13)  # all three known

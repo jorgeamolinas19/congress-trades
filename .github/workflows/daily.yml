@@ -1,0 +1,92 @@
+name: Daily update
+
+# New filings, fresh prices and news, rebuilt site data and private picks,
+# deployed to Vercel. Runs before the US market opens.
+on:
+  schedule:
+    - cron: "30 11 * * *"   # 11:30 UTC = 7:30 am New York (6:30 in winter)
+  workflow_dispatch: {}
+
+concurrency:
+  group: daily-update
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340   # the very first run downloads every filing since 2014
+    env:
+      HAS_VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e . pandas numpy statsmodels scipy yfinance matplotlib requests beautifulsoup4 lxml pdfplumber pyarrow
+
+      - name: Restore filing and price caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            data/raw
+            data/interim
+          key: pipeline-data-${{ github.run_id }}
+          restore-keys: pipeline-data-
+
+      - name: Seed caches from the data-seed release (first run only)
+        if: hashFiles('data/interim/prices.parquet') == ''
+        run: |
+          echo "No cached data; downloading the seed archive."
+          curl -sL --retry 3 -o seed.tar.gz \
+            "https://github.com/${{ github.repository }}/releases/download/data-seed/pipeline-seed.tar.gz"
+          tar -xzf seed.tar.gz && rm seed.tar.gz
+          du -sh data/raw data/interim
+
+      - name: Update data and picks
+        run: python -u -m congress.daily
+
+      - name: Save caches
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data/raw
+            data/interim
+          key: pipeline-data-${{ github.run_id }}
+
+      - name: Deploy to Vercel
+        if: env.HAS_VERCEL_TOKEN == 'true'
+        working-directory: web
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+
+      - name: Check the picks are still password-protected
+        if: env.HAS_VERCEL_TOKEN == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          sleep 20
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://congress-trades-roan.vercel.app/picks/recs.json?check=$GITHUB_RUN_ID")
+          echo "unauthenticated /picks/recs.json -> $code"
+          if [ "$code" != "401" ]; then
+            echo "::error::Picks data is reachable without the password ($code). Redeploying without it."
+            rm -rf web/public/picks
+            (cd web && npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN")
+            exit 1
+          fi
+
+      - name: Remind that deploys are off
+        if: env.HAS_VERCEL_TOKEN != 'true'
+        run: echo "::warning::VERCEL_TOKEN secret is not set, so the data was updated and cached but not deployed."

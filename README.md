@@ -120,15 +120,38 @@ re-downloadable. The cleaned trades and every results table are committed.
 
 `web/` is a Vue 3 + Vite site built on [frappe-ui](https://github.com/frappe/frappe-ui), the component
 library behind [Frappe Builder](https://github.com/frappe/builder). It is fully static, reading JSON exported
-by `python -m congress.site_data`, and is hosted on Vercel. Besides the stock analysis it lists the
-13,756 non-stock trades (options with parsed call/put, strike and expiry; bonds; funds and ETFs; crypto;
-private holdings) built by `python -m congress.other_assets`. These are shown as disclosed, not analyzed.
+by `python -m congress.site_data`, and is hosted on Vercel.
+
+- **Overview**: the headline result, growth chart, best and worst members, most-bought stocks, latest filings.
+- **Members**: sortable, filterable leaderboard; every member page has two verdicts (their timing vs. copying
+  them), a copy-odds and position-sizing calculator, a chart vs. SPY, and every trade linked to its filing.
+- **Latest trades** and **Options & more**: recent disclosures and the 13,756 non-stock trades (options with
+  parsed call/put, strike and expiry; bonds; funds and ETFs; crypto; private holdings), built by
+  `python -m congress.other_assets`. Shown as disclosed, not analyzed.
+- **Your picks** (`/picks`, password-protected via `web/middleware.js` and a `PICKS_PASSWORD` Vercel env var):
+  a Buy / Watch / Don't buy call for every trade disclosed in the last 30 days, with a calibrated confidence,
+  recent headlines and a dollar amount sized to the viewer's risk settings. Built by `python -m congress.recs`,
+  which fits a logistic model on pre-2020 trades and tests it on 2021+; it only ever labels a trade "Buy" if the
+  top-rated group beat SPY out of sample with t >= 2. Right now it doesn't (t = 1.8), so the best calls are
+  "Watch". The picks JSON is git-ignored and never enters this public repo.
+
+Search any member from any page with `/`. Light and dark mode, phone-width layouts.
 
 ```bash
 python -m congress.site_data          # refresh web/public/data/ from the study outputs
-cd web && npm install && npm run dev  # local preview
+python -m congress.recs               # rebuild the private picks (web/public/picks/, git-ignored)
+cd web && npm install && npm run dev  # local preview (no password locally)
 npx vercel deploy --prod              # from web/
 ```
+
+### Daily update
+
+`.github/workflows/daily.yml` runs `python -m congress.daily` every morning before the US open: new House and
+Senate filings, fresh prices for recently traded tickers, non-stock trades, site data and picks, then a Vercel
+deploy and a check that `/picks/recs.json` still returns 401 without the password. Filing and price caches
+persist in the Actions cache; the first run seeds them from the `data-seed` release asset instead of
+re-scraping 2014–2026. The study itself (regressions, robustness, figures) re-runs when the Ken French factor
+files publish a new month. Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
 
 ## Layout
 
@@ -147,5 +170,9 @@ src/congress/
   plots.py           figures -> reports/figures/
   validate.py        Senate cross-check, 50-trade spot-check sample
   site_data.py       per-member stats + JSON export for the website
+  other_assets.py    options / bonds / funds / crypto trades (listed, not analyzed)
+  odds.py            copy hit rates, luck-adjusted member odds, bad-case percentiles
+  recs.py            Buy/Watch/Don't-buy model, out-of-sample backtest, private picks JSON
+  daily.py           incremental daily update used by the GitHub Action
 tests/               parser, portfolio-timing and statistics tests
 ```

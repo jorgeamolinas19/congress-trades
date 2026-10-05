@@ -1,6 +1,19 @@
 {
-  "rewrites": [{ "source": "/((?!data/|assets/).*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "source": "/((?!data/|assets/|picks/).*)",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
-    { "source": "/data/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }] }
+    {
+      "source": "/data/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    }
   ]
 }

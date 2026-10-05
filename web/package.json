@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/functions": "^3.9.11",
     "frappe-ui": "^1.0.0",
     "vue": "^3.5.43",
     "vue-router": "^4.6.4"

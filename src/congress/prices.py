@@ -65,7 +65,40 @@ def _one_try(sym: str, start: str, end: str):
         return sym, None, {"symbol": sym, "status": f"error:{type(e).__name__}"}
 
 
-def download(symbols: list[str], start: str = "2013-01-01", end: str = "2026-09-30",
+def _tomorrow() -> str:
+    return (pd.Timestamp.today().normalize() + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+def refresh(symbols: list[str], start: str = "2013-01-01", chunk: int = 100) -> int:
+    """Re-download full adjusted history for `symbols` in batches and replace
+    them in the cache. Used daily for recently traded symbols (a full
+    re-download, not an append, because dividend adjustments rescale history)."""
+    px = pd.read_parquet(PRICES_PATH)
+    symbols = sorted(set(symbols) & set(px.columns))
+    updated = 0
+    for i in range(0, len(symbols), chunk):
+        batch = symbols[i:i + chunk]
+        for attempt in range(4):
+            try:
+                data = yf.download(batch, start=start, end=_tomorrow(), auto_adjust=True,
+                                   progress=False, threads=True, group_by="column")
+                break
+            except Exception:
+                time.sleep(30 * (attempt + 1))
+        else:
+            continue
+        close = data["Close"] if isinstance(data.columns, pd.MultiIndex) else data[["Close"]].set_axis(batch, axis=1)
+        close.index = close.index.tz_localize(None).normalize()
+        good = [c for c in close.columns if close[c].notna().sum() > 0]
+        px = px.reindex(px.index.union(close.index))
+        for c in good:
+            px[c] = close[c].reindex(px.index)
+        updated += len(good)
+    px.sort_index().to_parquet(PRICES_PATH)
+    return updated
+
+
+def download(symbols: list[str], start: str = "2013-01-01", end: str | None = None,
              retry_failed: bool = False, threads: int = 8) -> pd.DataFrame:
     """Download (or extend the cache with) adjusted closes for `symbols`.
 
@@ -76,6 +109,7 @@ def download(symbols: list[str], start: str = "2013-01-01", end: str = "2026-09-
     meta = pd.read_csv(META_PATH) if META_PATH.exists() else pd.DataFrame(columns=["symbol", "status"])
     if retry_failed:
         meta = meta[meta.status == "ok"]
+    end = end or _tomorrow()
     todo = sorted(set(symbols) - set(meta.symbol))
     if todo:
         with ThreadPoolExecutor(threads) as ex:

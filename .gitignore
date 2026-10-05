@@ -6,3 +6,4 @@ logs/
 # Raw filings and price caches are large and fully re-downloadable
 data/raw/
 data/interim/
+data/private/

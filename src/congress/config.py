@@ -10,7 +10,7 @@ REPORTS = ROOT / "reports"
 FIGURES = REPORTS / "figures"
 
 START_YEAR = 2014
-END_YEAR = 2026
+END_YEAR = __import__('datetime').date.today().year
 
 USER_AGENT = "Mozilla/5.0 (academic research; congress-trades replication)"
 
