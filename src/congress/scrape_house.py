@@ -87,8 +87,13 @@ def parse_ptr_text(text: str) -> list[dict]:
         block = text[m.start():end]
         amt = m.group("amt").strip()
         if amt.endswith("-"):  # range wrapped onto the following line
-            nxt = re.search(_MONEY, block[m.end() - m.start():])
-            amt = f"{amt} {nxt.group(0)}" if nxt else amt
+            # The next dollar figure is usually the upper bound, but can be the
+            # "Cap. Gains > $200?" column header; only a larger value qualifies.
+            lo = float(re.sub(r"[$,]", "", amt.rstrip("- ")))
+            for nxt in re.finditer(_MONEY, block[m.end() - m.start():]):
+                if float(re.sub(r"[$,]", "", nxt.group(0))) > lo:
+                    amt = f"{amt} {nxt.group(0)}"
+                    break
         # Asset name, ticker and tag all sit before the "FILING STATUS" line.
         status = STATUS_RE.search(block)
         asset_part = block[: status.start()] if status else block[:400]

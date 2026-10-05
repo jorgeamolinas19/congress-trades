@@ -169,3 +169,44 @@ SUBHoLDINg oF: Stocks, Bonds, & Mutual Funds
 def test_non_stock_filter(name, is_stock):
     from congress.clean import NON_STOCK_WORDS
     assert (NON_STOCK_WORDS.search(name) is None) == is_stock
+
+
+@pytest.mark.parametrize("text, kind, strike, expiry", [
+    ("SPDR S&P 500 ETF Option Type: Put Strike price: $210.00 Expires: 06/30/2017", "Put", 210.0, "06/30/2017"),
+    ("Purchase of 50 call options with a strike price of $22 and an expiration date of 1/15/16", "Call", 22.0, "1/15/16"),
+    ("CALL ISHARES RUSSELL 2000 $175 EXP 09/19/25", "Call", 175.0, "09/19/25"),
+    ("Call Option, $180, Exp. 4/5/19", "Call", 180.0, "4/5/19"),
+    ("SPY Feb 2016 put 180.000", "Put", 180.0, "Feb 2016"),   # year must not become the strike
+    ("TLT MaY 17 124.5 CaLL", "Call", 124.5, None),
+])
+def test_option_detail(text, kind, strike, expiry):
+    from congress.other_assets import option_detail
+    d = option_detail(text)
+    assert (d["option_type"], d["strike"], d["expiry"]) == (kind, strike, expiry)
+
+
+@pytest.mark.parametrize("code, text, expected", [
+    ("OP", "Apple Inc. (AAPL)", "Options"),
+    ("Municipal Security", "Univ Ala Gen Fee Rev Ref-A Bond", "Bonds & Treasuries"),
+    (None, "US Treasury Note 2.5% 2030", "Bonds & Treasuries"),
+    (None, "SPDR S&P 500 ETF Trust", "Funds & ETFs"),
+    (None, "Purchase of 92 call options", "Options"),
+    ("CT", "Bitcoin", "Crypto"),
+])
+def test_classify(code, text, expected):
+    from congress.other_assets import classify
+    assert classify(code, text) == expected
+
+
+def test_parse_amount_rejects_upper_bound_below_lower():
+    # "Cap. Gains > $200?" header text captured as the upper bound
+    assert parse_amount("$15,001 - $200") == (15001, 50000)
+
+
+def test_house_parser_wrapped_amount_skips_cap_gains_header():
+    text = """SP Tempus AI, Inc. (TEM) [OP] P 01/16/2026 01/23/2026 $50,001 -
+Cap. Gains > $200?
+$100,000
+F S: New
+"""
+    assert parse_ptr_text(text)[0]["amount"] == "$50,001 - $100,000"

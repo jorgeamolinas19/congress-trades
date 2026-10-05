@@ -14,4 +14,5 @@ function load(path) {
 
 export const getSummary = () => load('summary.json')
 export const getMembers = () => load('members.json')
+export const getOther = () => load('other.json')
 export const getMember = (id) => load(`members/${encodeURIComponent(id)}.json`)

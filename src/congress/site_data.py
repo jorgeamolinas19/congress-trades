@@ -127,9 +127,49 @@ def verdict(s: dict, n_buys: int) -> str:
     return "beat" if s["excess_ann"] > 0 else "lagged"
 
 
+OTHER_COLS = ["tx_date", "filing_date", "delay_days", "ticker", "asset_name", "asset_class", "side", "owner",
+              "amount_raw", "option_type", "strike", "expiry", "contracts", "detail", "excess_6m", "complete",
+              "source_url"]
+
+
+def load_other(px: pd.DataFrame, spy_px: pd.Series) -> pd.DataFrame:
+    """Non-stock trades for display. Funds/ETFs that yfinance prices as a fund
+    get a 6-month return vs SPY; options and bonds have no free price history."""
+    o = pd.read_parquet(PROCESSED / "other_trades.parquet")
+    o["member_id"] = o.member.map(slug)
+    o["ticker"] = o.ticker.str.replace("-", ".", regex=False)
+    o["symbol"] = o.ticker.map(lambda t: prices.yf_symbol(t) if isinstance(t, str) else None)
+    meta = prices.load_meta().set_index("symbol")
+    is_fund = (o.asset_class == "Funds & ETFs") & o.symbol.map(meta.instrument_type).isin(["ETF", "MUTUALFUND"])
+    priced = is_fund & o.symbol.isin(px.columns)
+    out = trade_outcomes(o[priced], px, spy_px)
+    o["excess_6m"] = out.trade_excess_6m.round(4).reindex(o.index)
+    o["complete"] = out.trade_complete.reindex(o.index)
+    # A one-line description: the option terms when parsed, else the filer's own note.
+    desc = o.description.fillna("").str.replace(r"\s+", " ", regex=True).str.slice(0, 110)
+    o["detail"] = desc.where(desc.ne(""))
+    # Options and funds whose ticker prices cleanly show the company/fund name
+    # rather than the parsed filing text ("... Class A P Common Stock").
+    clean_name = o.symbol.map(meta.long_name).where(o.asset_class.isin(["Options", "Funds & ETFs"]))
+    o["asset_name"] = clean_name.fillna(o.asset_name).fillna("").str.slice(0, 80)
+    return o
+
+
+def _other_records(o: pd.DataFrame, by: str = "tx_date", extra: tuple = ()) -> list[dict]:
+    other_key = "filing_date" if by == "tx_date" else "tx_date"
+    t = o.sort_values([by, other_key], ascending=False)[[*extra, *OTHER_COLS]].copy()
+    t["tx_date"] = t.tx_date.dt.strftime("%Y-%m-%d")
+    t["filing_date"] = t.filing_date.dt.strftime("%Y-%m-%d")
+    return json.loads(t.to_json(orient="records"))
+
+
 def main() -> None:
     MEMBERS_DIR.mkdir(parents=True, exist_ok=True)
     trades = pd.read_parquet(PROCESSED / "trades.parquet")
+    # Price any fund/ETF tickers from the non-stock trades not yet in the cache.
+    other_raw = pd.read_parquet(PROCESSED / "other_trades.parquet")
+    fund_syms = other_raw.loc[other_raw.asset_class == "Funds & ETFs", "ticker"].dropna().map(prices.yf_symbol)
+    prices.download(sorted(set(fund_syms)), threads=2)
     factors = load_factors()
     rf = factors.RF
     px = pd.read_parquet(prices.PRICES_PATH).sort_index()
@@ -147,24 +187,36 @@ def main() -> None:
     trades = trades.join(trade_outcomes(trades, px, spy_px))
     states = _member_states()
     trades["member_id"] = trades.member.map(slug)
+    other = load_other(px, spy_px)
+    other_by_member = dict(tuple(other.groupby("member_id")))
+    stock_by_member = dict(tuple(trades.groupby("member_id")))
 
     # ---- per member -------------------------------------------------------
+    # Every member with any disclosed trade gets a page, including those who
+    # only trade options, bonds or funds (they get no stock verdict).
     rows, detail = [], {}
-    for mid, g in trades.groupby("member_id"):
+    for mid in sorted(set(stock_by_member) | set(other_by_member)):
+        g = stock_by_member.get(mid, trades.iloc[:0])
+        og = other_by_member.get(mid, other.iloc[:0])
+        both = pd.concat([g[["member", "chamber", "party", "bioguide", "state_dst", "tx_date", "filing_date", "delay_days", "amount_mid"]],
+                          og[["member", "chamber", "party", "bioguide", "state_dst", "tx_date", "filing_date", "delay_days", "amount_mid"]]])
+        base = g if len(g) else og
         buys, sells = g[g.side == "buy"], g[g.side == "sell"]
-        bio = g.bioguide.dropna()
-        party = g.party.mode()
-        st = (g.state_dst.dropna().str[:2].mode())
+        bio = both.bioguide.dropna()
+        party = base.party.mode()
+        st = (both.state_dst.dropna().str[:2].mode())
         state = st.iloc[0] if len(st) else (states.get(bio.iloc[0]) if len(bio) else None)
         info = {
-            "id": mid, "name": g.member.iloc[0], "chamber": g.chamber.mode().iloc[0],
+            "id": mid, "name": base.member.iloc[0], "chamber": base.chamber.mode().iloc[0],
             "party": party.iloc[0] if len(party) else None, "state": state,
             "n_trades": int(len(g)), "n_buys": int(len(buys)), "n_sells": int(len(sells)),
-            "first_trade": g.tx_date.min().strftime("%Y-%m-%d"), "last_trade": g.tx_date.max().strftime("%Y-%m-%d"),
-            "last_filing": g.filing_date.max().strftime("%Y-%m-%d"),
-            "median_delay_days": int(g.delay_days.median()),
-            "pct_late": _r((g.delay_days > 45).mean(), 3),
+            "first_trade": both.tx_date.min().strftime("%Y-%m-%d"), "last_trade": both.tx_date.max().strftime("%Y-%m-%d"),
+            "last_filing": both.filing_date.max().strftime("%Y-%m-%d"),
+            "median_delay_days": int(both.delay_days.median()),
+            "pct_late": _r((both.delay_days > 45).mean(), 3),
             "volume_mid": float(g.amount_mid.sum()),
+            "n_other": int(len(og)),
+            "other_counts": {k: int(v) for k, v in og.asset_class.value_counts().items()},
         }
         done = buys[buys.trade_complete]
         info["hit_rate"] = _r((done.trade_excess_6m > 0).mean(), 3) if len(done) else None
@@ -203,7 +255,9 @@ def main() -> None:
         t["asset_name"] = t.asset_name.str.slice(0, 80)
         for c in ["trade_ret_6m", "trade_excess_6m", "filing_excess_6m"]:
             t[c] = t[c].round(4)
-        payload = {**m, "series": series, "trades": json.loads(t.to_json(orient="records"))}
+        og = other_by_member.get(m["id"], other.iloc[:0])
+        payload = {**m, "series": series, "trades": json.loads(t.to_json(orient="records")),
+                   "other_trades": _other_records(og)}
         _dump(MEMBERS_DIR / f"{m['id']}.json", payload)
 
     # ---- site-wide ---------------------------------------------------------
@@ -245,6 +299,18 @@ def main() -> None:
             ["member_id", "member", "chamber", "party", "tx_date", "filing_date", "delay_days", "ticker",
              "asset_name", "side", "amount_raw", "source_url"]].to_json(orient="records")),
     }
+    opts = other[other.asset_class == "Options"]
+    summary["other"] = {
+        "n": int(len(other)),
+        "counts": {k: int(v) for k, v in other.asset_class.value_counts().items()},
+        "members": int(other.member_id.nunique()),
+        "top_option_traders": [
+            {"member_id": mid, "member": grp.member.iloc[0], "chamber": grp.chamber.iloc[0],
+             "party": grp.party.iloc[0], "n": int(len(grp))}
+            for mid, grp in sorted(opts.groupby("member_id"), key=lambda kv: -len(kv[1]))[:10]],
+    }
+    _dump(OUT / "other.json", _other_records(other, by="filing_date",
+                                             extra=("member_id", "member", "chamber", "party")))
     _dump(OUT / "summary.json", summary)
     _dump(OUT / "members.json", rows)
     print(f"{len(rows)} members, {len(eligible)} with a verdict ->", OUT)

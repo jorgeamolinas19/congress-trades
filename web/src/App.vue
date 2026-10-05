@@ -43,5 +43,6 @@ const links = [
   { to: '/', label: 'Overview', exact: true },
   { to: '/members', label: 'Members' },
   { to: '/trades', label: 'Latest trades' },
+  { to: '/other', label: 'Options & more' },
 ]
 </script>

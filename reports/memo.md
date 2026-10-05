@@ -31,8 +31,8 @@ third-party feed:
 - **House:** 5,657 electronic reports, as PDFs, from the House Clerk.
 
 After removing options, bonds and funds, consolidating amended filings, and
-matching each ticker to a priced security, the sample has **43,525 stock trades
-(21,562 purchases) by 289 members**. The median trade is disclosed 27 days late,
+matching each ticker to a priced security, the sample has **43,520 stock trades
+(21,561 purchases) by 289 members**. The median trade is disclosed 27 days late,
 and 15% are disclosed after the 45-day deadline. One House member disclosed a
 2014 trade in 2017. This is why the investable test must key off the filing
 date, never the trade date.

@@ -7,6 +7,7 @@ export default createRouter({
     { path: '/', name: 'overview', component: () => import('./pages/Overview.vue') },
     { path: '/members', name: 'members', component: () => import('./pages/Members.vue') },
     { path: '/members/:id', name: 'member', component: () => import('./pages/Member.vue'), props: true },
+    { path: '/other', name: 'other', component: () => import('./pages/Other.vue') },
     { path: '/trades', name: 'trades', component: () => import('./pages/Trades.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

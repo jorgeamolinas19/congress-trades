@@ -10,7 +10,8 @@
       <h1 class="mt-2 text-2xl font-semibold text-ink-gray-9">{{ m.name }}</h1>
       <div class="mt-1 text-ink-gray-6">
         {{ m.party || 'Unknown party' }} · {{ m.chamber }}<span v-if="m.state"> · {{ m.state }}</span>
-        · {{ num(m.n_trades) }} stock trades from {{ date(m.first_trade) }} to {{ date(m.last_trade) }}
+        · {{ num(m.n_trades) }} stock trades<span v-if="m.n_other">, {{ num(m.n_other) }} options, bonds &amp; other</span>
+        · {{ date(m.first_trade) }} to {{ date(m.last_trade) }}
       </div>
     </div>
 
@@ -57,9 +58,9 @@
       </div>
     </section>
 
-    <section>
+    <section v-if="m.trades.length">
       <div class="flex flex-wrap items-center gap-3">
-        <h2 class="text-lg font-semibold text-ink-gray-9">Trades</h2>
+        <h2 class="text-lg font-semibold text-ink-gray-9">Stock trades</h2>
         <TabButtons v-model="side" :options="[{ label: 'All', value: 'all' }, { label: 'Buys', value: 'buy' }, { label: 'Sells', value: 'sell' }]" />
         <TextInput v-model="ticker" placeholder="Filter ticker…" class="w-36" aria-label="Filter by ticker" />
         <span class="text-sm text-ink-gray-5 ml-auto">{{ num(filtered.length) }} trades</span>
@@ -113,6 +114,12 @@
         sale.
       </p>
     </section>
+
+    <section v-if="m.other_trades && m.other_trades.length">
+      <h2 class="text-lg font-semibold text-ink-gray-9">Options, bonds, funds &amp; other ({{ num(m.n_other) }})</h2>
+      <p class="mt-1 mb-3 text-sm text-ink-gray-5">Listed as disclosed. Not included in the performance figures above.</p>
+      <OtherTradesTable :trades="m.other_trades" :initial-class="m.other_counts.Options ? 'Options' : 'all'" />
+    </section>
   </div>
 </template>
 
@@ -123,6 +130,7 @@ import StatTile from '../components/StatTile.vue'
 import GrowthChart from '../components/GrowthChart.vue'
 import VerdictBadge from '../components/VerdictBadge.vue'
 import CoverageNote from '../components/CoverageNote.vue'
+import OtherTradesTable from '../components/OtherTradesTable.vue'
 import { getMember } from '../lib/data'
 import { date, excessClass, money, num, pct, signedPct, tstat } from '../lib/format'
 

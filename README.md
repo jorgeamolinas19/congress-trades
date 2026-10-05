@@ -5,7 +5,7 @@ member's record vs. the market, their trades, and the full study.
 
 **Short answer: no.** Members of Congress must disclose their stock trades within
 45 days. This repo builds the full dataset from the official House and Senate
-filings: **43,525 common-stock trades by 289 members, 2014–2026**. It then tests
+filings: **43,520 common-stock trades by 289 members, 2014–2026**. It then tests
 whether copying those trades beats the market.
 
 | Portfolio (Mar 2014 – Aug 2026) | Ann. return | Sharpe | Max DD | FF5+Mom alpha | t-stat |
@@ -59,9 +59,9 @@ The two-page write-up is in [reports/memo.md](reports/memo.md).
 | Raw transaction rows | 72,060 |
 | Drop exchanges; options, bonds, funds, other non-stock; no ticker | 54,935 |
 | Drop impossible dates (filed before trade, or more than 3 years late) | 54,548 |
-| Drop duplicate rows from amended filings (keep the earliest disclosure) | 50,508 |
-| Drop tickers with no yfinance price (delisted → survivorship) | 44,863 |
-| Drop ETFs/funds (yfinance instrument type), no price on trade date, recycled tickers | **43,525** |
+| Drop duplicate rows from amended filings (keep the earliest disclosure) | 50,503 |
+| Drop tickers with no yfinance price (delisted → survivorship) | 44,858 |
+| Drop ETFs/funds (yfinance instrument type), no price on trade date, recycled tickers | **43,520** |
 
 **Portfolios.** Calendar-time portfolios. Each disclosed purchase opens a position.
 - **Hold:** 126 trading days (~6 months).
@@ -120,7 +120,9 @@ re-downloadable. The cleaned trades and every results table are committed.
 
 `web/` is a Vue 3 + Vite site built on [frappe-ui](https://github.com/frappe/frappe-ui), the component
 library behind [Frappe Builder](https://github.com/frappe/builder). It is fully static, reading JSON exported
-by `python -m congress.site_data`, and is hosted on Vercel.
+by `python -m congress.site_data`, and is hosted on Vercel. Besides the stock analysis it lists the
+13,756 non-stock trades (options with parsed call/put, strike and expiry; bonds; funds and ETFs; crypto;
+private holdings) built by `python -m congress.other_assets`. These are shown as disclosed, not analyzed.
 
 ```bash
 python -m congress.site_data          # refresh web/public/data/ from the study outputs

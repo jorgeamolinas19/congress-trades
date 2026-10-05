@@ -42,7 +42,7 @@ def parse_amount(s) -> tuple[float, float]:
     if not nums:
         return np.nan, np.nan
     lo = nums[0]
-    if len(nums) >= 2:
+    if len(nums) >= 2 and nums[1] >= lo:
         return lo, nums[1]
     if "-" in s and lo in BRACKETS:  # range whose upper half was lost on a line wrap
         return lo, float(BRACKETS[lo])
