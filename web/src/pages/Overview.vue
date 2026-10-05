@@ -8,10 +8,14 @@
   <div v-else class="space-y-12">
     <!-- Hero: the answer, then the three things a visitor can do. -->
     <section>
-      <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+      <div class="eyebrow text-ink-gray-5">
         {{ num(s.study.sample.n_trades) }} disclosed stock trades · {{ s.study.sample.n_members }} members · 2014 to {{ s.data_through.slice(0, 4) }}
       </div>
       <h1 class="mt-2 text-3xl md:text-4xl font-semibold tracking-tight text-ink-gray-9 max-w-3xl">Do members of Congress beat the market?</h1>
+      <div class="mt-4 flex flex-wrap items-baseline gap-x-6 gap-y-2 font-mono">
+        <div><span class="text-4xl md:text-5xl font-semibold text-ink-gray-9 num">{{ pct(filing.ann_return) }}</span><span class="ml-2 text-sm text-ink-gray-5 uppercase tracking-wider">/ yr copying Congress</span></div>
+        <div><span class="text-4xl md:text-5xl font-semibold text-ink-gray-6 num">{{ pct(spy.ann_return) }}</span><span class="ml-2 text-sm text-ink-gray-5 uppercase tracking-wider">/ yr S&amp;P 500</span></div>
+      </div>
       <p class="mt-3 text-lg text-ink-gray-7 leading-relaxed max-w-3xl">
         Not on average, and not in a way you could copy. Buying what Congress buys, the day it is disclosed, would have
         returned <strong class="text-ink-gray-9">{{ pct(filing.ann_return) }} a year</strong> against
@@ -21,7 +25,7 @@
       <div class="mt-6 grid sm:grid-cols-3 gap-3">
         <router-link v-for="c in ctas" :key="c.to" :to="c.to"
           class="group rounded-lg border border-outline-gray-2 p-4 hover:border-outline-gray-4 hover:bg-surface-gray-1 transition-colors">
-          <div class="text-2xl" aria-hidden="true">{{ c.icon }}</div>
+          <div class="eyebrow text-ink-green-6" aria-hidden="true">{{ c.icon }}</div>
           <div class="mt-2 font-semibold text-ink-gray-9 group-hover:underline">{{ c.title }}</div>
           <div class="mt-1 text-sm text-ink-gray-6">{{ c.sub }}</div>
         </router-link>
@@ -130,9 +134,9 @@ onMounted(async () => {
 })
 
 const ctas = [
-  { to: '/members', icon: '🏛️', title: 'Look up a member', sub: 'Did their picks beat the market? Could you have profited by copying them?' },
-  { to: '/trades', icon: '🕒', title: 'See the latest trades', sub: 'What was just disclosed, and the most to put in at your risk level.' },
-  { to: '/other', icon: '📄', title: 'Options, bonds & funds', sub: 'Everything that isn\'t common stock, including the famous options trades.' },
+  { to: '/members', icon: '01 / MEMBERS', title: 'Look up a member', sub: 'Did their picks beat the market? Could you have profited by copying them?' },
+  { to: '/trades', icon: '02 / TAPE', title: 'See the latest trades', sub: 'What was just disclosed, and the most to put in at your risk level.' },
+  { to: '/other', icon: '03 / DERIVATIVES', title: 'Options, bonds & funds', sub: 'Everything that isn\'t common stock, including the famous options trades.' },
 ]
 const trade = computed(() => s.value.study.summary.trade_date)
 const filing = computed(() => s.value.study.summary.filing_date)

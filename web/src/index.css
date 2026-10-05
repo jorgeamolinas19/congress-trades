@@ -1,3 +1,58 @@
 @import 'frappe-ui/style.css';
 
-.num { font-variant-numeric: tabular-nums; }
+/* Trading-desk theme: dark by default, retuned through frappe-ui's own color
+   variables so every component (badges, inputs, charts) follows. */
+:root[data-theme="dark"] {
+  --surface-base: #0b0e12;
+  --surface-gray-1: #11161c;
+  --surface-gray-2: #171e26;
+  --surface-gray-3: #202933;
+  --surface-gray-4: #2a3542;
+  --surface-elevation-1: #11161c;
+  --surface-elevation-2: #151b22;
+  --surface-sidebar: #0e1217;
+  --outline-gray-1: #1b232c;
+  --outline-gray-2: #27313c;
+  --outline-gray-3: #33404d;
+  --outline-gray-4: #42515f;
+  --outline-gray-5: #536476;
+  --ink-gray-9: #e6edf3;
+  --ink-gray-8: #c9d1d9;
+  --ink-gray-7: #adb7c2;
+  --ink-gray-6: #8b97a4;
+  --ink-gray-5: #6e7a87;
+  --ink-gray-4: #505b67;
+  --ink-gray-3: #3b444e;
+  --ink-green-6: #3fb950;
+  --ink-green-7: #56d364;
+  --ink-red-6: #f85149;
+  --ink-red-7: #ff7b72;
+  --ink-amber-7: #d29922;
+  --ink-amber-6: #bb8009;
+  --ink-blue-6: #58a6ff;
+  --ink-blue-7: #79b8ff;
+  --ink-blue-link: #58a6ff;
+}
+
+/* Numbers, tickers and table cells read in monospace, like a terminal. */
+.num, .font-mono, kbd, #main table td, #main table th {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+#main table th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500; }
+#main table td { font-size: 13px; padding-top: 0.4rem; padding-bottom: 0.4rem; }
+#main table td .text-base { font-size: 13px; }
+#main tbody tr:nth-child(even) { background: color-mix(in oklab, var(--surface-gray-1) 60%, transparent); }
+#main tbody tr:hover { background: var(--surface-gray-2); }
+#main h1, #main h2 { letter-spacing: -0.01em; }
+
+/* Section eyebrows and badges in the same terminal voice. */
+.eyebrow { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Ticker tape under the header. */
+.tape { overflow: hidden; white-space: nowrap; }
+.tape-track { display: inline-block; animation: tape 90s linear infinite; }
+.tape:hover .tape-track, .tape:focus-within .tape-track { animation-play-state: paused; }
+@keyframes tape { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .tape-track { animation: none; } }
+#main table a { white-space: nowrap; }

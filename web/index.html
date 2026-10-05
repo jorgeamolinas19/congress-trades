@@ -6,11 +6,14 @@
     <title>Congress Trades Tracker</title>
     <meta name="description" content="Do members of Congress beat the market with their stock trades? 43,000+ disclosed trades, 2014–2026, measured against SPY and the Fama-French factors." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" />
     <script>
       // Pick the theme before first paint so there is no light-mode flash.
       try {
         const saved = localStorage.getItem('theme')
-        const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+        const dark = saved ? saved === 'dark' : true  // dark is the default look; the toggle remembers a choice
         document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
       } catch (e) {}
     </script>

@@ -7,8 +7,8 @@
         <div class="h-14 flex items-center gap-3">
           <router-link to="/" class="flex items-center gap-2 font-semibold text-ink-gray-9 shrink-0" aria-label="Congress Trades Tracker home">
             <img src="/favicon.svg" alt="" class="h-6 w-6" />
-            <span class="hidden lg:inline">Congress Trades Tracker</span>
-            <span class="lg:hidden">Congress Trades</span>
+            <span class="font-mono tracking-tight hidden lg:inline">CONGRESS<span class="text-ink-green-6">/</span>TRADES</span>
+            <span class="font-mono tracking-tight lg:hidden">C<span class="text-ink-green-6">/</span>T</span>
           </router-link>
 
           <nav class="hidden md:flex items-center gap-0.5 ml-2" aria-label="Main">
@@ -38,6 +38,7 @@
         </div>
       </div>
     </header>
+    <DeskStrip />
 
     <main id="main" class="flex-1 mx-auto w-full max-w-6xl px-4 py-6 md:py-8">
       <router-view />
@@ -70,6 +71,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Button } from 'frappe-ui'
 import MemberSearch from './components/MemberSearch.vue'
+import DeskStrip from './components/DeskStrip.vue'
 import { useTheme } from './lib/theme'
 import { getSummary } from './lib/data'
 import { date } from './lib/format'
@@ -89,7 +91,7 @@ onMounted(() => getSummary().then((s) => { dataThrough.value = s.data_through })
 
 <style scoped>
 .nav-link {
-  @apply px-2.5 py-1.5 rounded-2 text-base text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9;
+  @apply px-2.5 py-1.5 rounded-2 font-mono text-sm tracking-wide text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9;
 }
 .nav-link.active {
   @apply bg-surface-gray-3 text-ink-gray-9;
