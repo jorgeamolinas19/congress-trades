@@ -210,3 +210,37 @@ $100,000
 F S: New
 """
     assert parse_ptr_text(text)[0]["amount"] == "$50,001 - $100,000"
+
+
+def test_shrinkage_pulls_lucky_small_records_to_the_mean():
+    from congress.odds import member_odds, shrinkage_strength
+    rng = np.random.default_rng(1)
+    n = rng.integers(10, 200, 150).astype(float)
+    rates = rng.binomial(n.astype(int), 0.5) / n      # everyone is a coin flip
+    k = shrinkage_strength(rates, n, 0.25)
+    assert k > 100                                    # no real dispersion -> strong prior
+    lucky = member_odds(rate=10 / 12, n=12, p=0.5, k=k, unit_var=0.25)
+    assert 0.45 < lucky["odds"] < 0.56
+
+
+def test_shrinkage_trusts_real_dispersion():
+    from congress.odds import shrinkage_strength
+    rng = np.random.default_rng(2)
+    n = np.full(150, 400.0)
+    skill = rng.choice([0.3, 0.7], 150)               # members genuinely differ
+    k = shrinkage_strength(rng.binomial(400, skill) / n, n, 0.21)
+    assert k < 20
+
+
+def test_filing_scores_count_each_filing_once():
+    from congress.odds import filing_scores
+    per, _ = filing_scores(pd.Series(["a"] * 4), pd.Series([1, 1, 1, 2]), pd.Series([1, 1, 1, 0]))
+    assert per.loc["a", "n"] == 2 and per.loc["a", "rate"] == pytest.approx(0.5)
+
+
+def test_outcome_stats_percentiles_and_ci():
+    from congress.odds import outcome_stats
+    ret = pd.Series(np.linspace(-0.5, 0.5, 101))
+    out = outcome_stats(ret, ret, pd.Series(np.arange(101) % 10))
+    assert out["n"] == 101 and out["return_percentiles"]["p50"] == pytest.approx(0.0)
+    assert out["hit_ci"][0] < out["hit_rate"] < out["hit_ci"][1]

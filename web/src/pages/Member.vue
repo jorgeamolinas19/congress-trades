@@ -43,6 +43,8 @@
       <StatTile label="Disclosed volume" :value="money(m.volume_mid)" sub="Sum of range midpoints" />
     </section>
 
+    <CopyCalculator v-if="odds" :member="m" :odds="odds" />
+
     <section v-if="m.series && m.series.dates && m.series.dates.length > 4" class="rounded-lg border border-outline-gray-2 p-4">
       <GrowthChart title="Growth of $1 while invested" subtitle="Their purchases at their own timing, held 6 months, vs SPY over the same days. Flat stretches are periods with no open positions."
         :dates="m.series.dates" :series="[
@@ -75,6 +77,7 @@
               <th class="px-3 py-2 text-left font-medium">Type</th>
               <th class="px-3 py-2 text-left font-medium hidden md:table-cell">Amount</th>
               <th class="px-3 py-2 text-right font-medium">6 mo vs SPY</th>
+              <th class="px-3 py-2 text-right font-medium hidden md:table-cell" title="Based on your risk settings above">Max to put in</th>
               <th class="px-3 py-2 text-left font-medium hidden lg:table-cell">Filing</th>
             </tr>
           </thead>
@@ -96,6 +99,7 @@
                 :title="t.side === 'sell' ? 'For a sale, a negative number means the stock fell behind SPY after they sold' : ''">
                 {{ signedPct(t.trade_excess_6m) }}<span v-if="t.trade_excess_6m !== null && !t.trade_complete" class="text-xs text-ink-gray-5"> so far</span>
               </td>
+              <td class="px-3 py-2 text-right num whitespace-nowrap hidden md:table-cell" :title="stockSize(t).reason">{{ stockSize(t).short }}</td>
               <td class="px-3 py-2 hidden lg:table-cell">
                 <a :href="t.source_url" target="_blank" rel="noopener" class="text-sm text-ink-blue-link hover:underline">Original ↗</a>
               </td>
@@ -118,7 +122,7 @@
     <section v-if="m.other_trades && m.other_trades.length">
       <h2 class="text-lg font-semibold text-ink-gray-9">Options, bonds, funds &amp; other ({{ num(m.n_other) }})</h2>
       <p class="mt-1 mb-3 text-sm text-ink-gray-5">Listed as disclosed. Not included in the performance figures above.</p>
-      <OtherTradesTable :trades="m.other_trades" :initial-class="m.other_counts.Options ? 'Options' : 'all'" />
+      <OtherTradesTable :trades="m.other_trades" :odds="odds" :initial-class="m.other_counts.Options ? 'Options' : 'all'" />
     </section>
   </div>
 </template>
@@ -131,8 +135,10 @@ import GrowthChart from '../components/GrowthChart.vue'
 import VerdictBadge from '../components/VerdictBadge.vue'
 import CoverageNote from '../components/CoverageNote.vue'
 import OtherTradesTable from '../components/OtherTradesTable.vue'
-import { getMember } from '../lib/data'
+import CopyCalculator from '../components/CopyCalculator.vue'
+import { getMember, getSummary } from '../lib/data'
 import { date, excessClass, money, num, pct, signedPct, tstat } from '../lib/format'
+import { sizeTrade } from '../lib/risk'
 
 const props = defineProps({ id: { type: String, required: true } })
 const m = ref(null)
@@ -141,6 +147,8 @@ const side = ref('all')
 const ticker = ref('')
 const p = ref(0)
 const PER_PAGE = 50
+const odds = ref(null)
+getSummary().then((s) => { odds.value = s.odds }).catch(() => {})
 
 watch(() => props.id, async (id) => {
   m.value = null; error.value = ''; p.value = 0
@@ -163,5 +171,7 @@ const filtered = computed(() => {
 })
 watch([side, ticker], () => { p.value = 0 })
 const pages = computed(() => Math.ceil(filtered.value.length / PER_PAGE))
+const stockSize = (t) => sizeTrade({ assetClass: 'Stock', side: t.side,
+  percentiles: m.value?.copy_odds?.return_percentiles || odds.value?.stocks.return_percentiles })
 const page = computed(() => filtered.value.slice(p.value * PER_PAGE, (p.value + 1) * PER_PAGE))
 </script>

@@ -20,7 +20,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from . import analysis, metrics, prices
+from . import analysis, metrics, odds, prices
 from .config import PROCESSED, RAW, REPORTS, ROOT
 from .factors import load_factors
 from .portfolio import Rules, run
@@ -145,6 +145,10 @@ def load_other(px: pd.DataFrame, spy_px: pd.Series) -> pd.DataFrame:
     out = trade_outcomes(o[priced], px, spy_px)
     o["excess_6m"] = out.trade_excess_6m.round(4).reindex(o.index)
     o["complete"] = out.trade_complete.reindex(o.index)
+    # What a copier got: entry the day after disclosure (feeds the odds/sizing figures).
+    o["copy_ret_6m"] = out.filing_ret_6m.reindex(o.index)
+    o["copy_excess_6m"] = out.filing_excess_6m.reindex(o.index)
+    o["copy_complete"] = out.filing_complete.reindex(o.index).fillna(False).astype(bool)
     # A one-line description: the option terms when parsed, else the filer's own note.
     desc = o.description.fillna("").str.replace(r"\s+", " ", regex=True).str.slice(0, 110)
     o["detail"] = desc.where(desc.ne(""))
@@ -191,6 +195,20 @@ def main() -> None:
     other_by_member = dict(tuple(other.groupby("member_id")))
     stock_by_member = dict(tuple(trades.groupby("member_id")))
 
+    # ---- historical copy odds ----------------------------------------------
+    # Completed copied purchases: bought the day after disclosure, held 6 months.
+    copied = trades[(trades.side == "buy") & trades.filing_complete.astype(bool)]
+    month = copied.filing_date.dt.to_period("M").astype(str)
+    stock_odds = odds.outcome_stats(copied.filing_ret_6m, copied.filing_excess_6m, month)
+    # Member odds count filings, not trades (see odds.py).
+    per, unit_var = odds.filing_scores(copied.member_id, copied.filing_date, copied.filing_excess_6m > 0)
+    fit = per[per.n >= MIN_BUYS]
+    k = odds.shrinkage_strength(fit.rate.to_numpy(), fit.n.to_numpy(float), unit_var)
+    etf_buys = other[(other.side == "buy") & other.copy_complete]
+    etf = odds.outcome_stats(etf_buys.copy_ret_6m, etf_buys.copy_excess_6m,
+                             etf_buys.filing_date.dt.to_period("M").astype(str))
+    copied_by_member = dict(tuple(copied.groupby("member_id")))
+
     # ---- per member -------------------------------------------------------
     # Every member with any disclosed trade gets a page, including those who
     # only trade options, bonds or funds (they get no stock verdict).
@@ -228,6 +246,20 @@ def main() -> None:
         info["trade"], info["filing"] = st_["trade"], st_["filing"]
         top = buys.ticker.value_counts().head(5)
         info["top_buys"] = [{"ticker": t, "n": int(n)} for t, n in top.items()]
+        if mid in per.index:
+            c = per.loc[mid]
+            info["copy_odds"] = {k_: _r(v) if isinstance(v, float) else v for k_, v in
+                                 odds.member_odds(float(c.rate), int(c.n), stock_odds["hit_rate"], k, unit_var).items()}
+            info["copy_odds"]["odds_range"] = [_r(x) for x in info["copy_odds"]["odds_range"]]
+            mc = copied_by_member[mid]
+            # The member's own bad-case returns only once there are enough trades to estimate them.
+            if len(mc) >= 30:
+                info["copy_odds"]["return_percentiles"] = {
+                    k_: _r(v) for k_, v in odds.outcome_stats(
+                        mc.filing_ret_6m, mc.filing_excess_6m,
+                        mc.filing_date.dt.to_period("M").astype(str))["return_percentiles"].items()}
+        else:
+            info["copy_odds"] = None
         rows.append(info)
         detail[mid] = (g, series)
 
@@ -300,6 +332,10 @@ def main() -> None:
              "asset_name", "side", "amount_raw", "source_url"]].to_json(orient="records")),
     }
     opts = other[other.asset_class == "Options"]
+    summary["odds"] = {"stocks": stock_odds, "etfs": etf, "prior_strength_filings": round(k, 1),
+                       "member_spread_sd": round(float(np.sqrt(unit_var / k)), 4), "members_fitted": int(len(fit)),
+                       "persistence": odds.persistence_check(copied.member_id, copied.filing_date,
+                                                             copied.filing_excess_6m > 0)}
     summary["other"] = {
         "n": int(len(other)),
         "counts": {k: int(v) for k, v in other.asset_class.value_counts().items()},

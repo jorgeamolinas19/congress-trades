@@ -15,6 +15,10 @@ export const money = (x) => {
   if (x >= 1e3) return `$${(x / 1e3).toFixed(0)}k`
   return `$${x.toFixed(0)}`
 }
+export const usd = (x) =>
+  x === null || x === undefined || Number.isNaN(x)
+    ? '—'
+    : x.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: x < 10 ? 2 : 0 })
 export const partyShort = (p) => ({ Democrat: 'D', Republican: 'R', Independent: 'I', Libertarian: 'L' })[p] || '?'
 export const memberTag = (m) => [partyShort(m.party), m.state].filter(Boolean).join('-') + ` · ${m.chamber}`
 

@@ -28,7 +28,9 @@
         </ul>
       </section>
 
-      <OtherTradesTable :trades="rows" show-member :initial-class="$route.query.class || 'all'" />
+      <RiskSettings />
+
+      <OtherTradesTable :trades="rows" :odds="s.odds" show-member :initial-class="$route.query.class || 'all'" />
     </template>
   </div>
 </template>
@@ -37,6 +39,7 @@
 import { onMounted, ref } from 'vue'
 import StatTile from '../components/StatTile.vue'
 import OtherTradesTable from '../components/OtherTradesTable.vue'
+import RiskSettings from '../components/RiskSettings.vue'
 import { getOther, getSummary } from '../lib/data'
 import { memberTag, num } from '../lib/format'
 

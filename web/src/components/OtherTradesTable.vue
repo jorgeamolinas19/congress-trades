@@ -17,6 +17,7 @@
             <th class="px-3 py-2 text-left font-medium">Type</th>
             <th class="px-3 py-2 text-left font-medium hidden md:table-cell">Amount</th>
             <th class="px-3 py-2 text-right font-medium hidden md:table-cell" title="Funds and ETFs only">6 mo vs SPY</th>
+            <th v-if="odds" class="px-3 py-2 text-right font-medium hidden md:table-cell" title="Based on your risk settings">Max to put in</th>
             <th class="px-3 py-2 text-left font-medium hidden lg:table-cell">Filing</th>
           </tr>
         </thead>
@@ -45,11 +46,12 @@
               <template v-if="t.excess_6m !== null && t.excess_6m !== undefined">{{ signedPct(t.excess_6m) }}<span v-if="!t.complete" class="text-xs text-ink-gray-5"> so far</span></template>
               <span v-else class="text-ink-gray-4">—</span>
             </td>
+            <td v-if="odds" class="px-3 py-2 text-right num whitespace-nowrap hidden md:table-cell" :title="size(t).reason">{{ size(t).short }}</td>
             <td class="px-3 py-2 hidden lg:table-cell">
               <a :href="t.source_url" target="_blank" rel="noopener" class="text-sm text-ink-blue-link hover:underline">Original ↗</a>
             </td>
           </tr>
-          <tr v-if="!page.length"><td colspan="8" class="px-3 py-6 text-center text-ink-gray-5">No trades match.</td></tr>
+          <tr v-if="!page.length"><td colspan="9" class="px-3 py-6 text-center text-ink-gray-5">No trades match.</td></tr>
         </tbody>
       </table>
     </div>
@@ -65,11 +67,13 @@
 import { computed, ref, watch } from 'vue'
 import { Badge, Button, TabButtons, TextInput } from 'frappe-ui'
 import { date, excessClass, memberTag, num, signedPct } from '../lib/format'
+import { sizeTrade } from '../lib/risk'
 
 const props = defineProps({
   trades: { type: Array, required: true },
   showMember: { type: Boolean, default: false },
   initialClass: { type: String, default: 'all' },
+  odds: { type: Object, default: null },
 })
 const CLASSES = ['Options', 'Bonds & Treasuries', 'Funds & ETFs', 'Crypto', 'Private & other']
 const cls = ref(props.initialClass)
@@ -92,6 +96,8 @@ const filtered = computed(() => {
 watch([cls, side, q, () => props.trades], () => { p.value = 0 })
 const pages = computed(() => Math.ceil(filtered.value.length / PER_PAGE))
 const page = computed(() => filtered.value.slice(p.value * PER_PAGE, (p.value + 1) * PER_PAGE))
+
+const size = (t) => sizeTrade({ assetClass: t.asset_class, side: t.side, percentiles: props.odds?.etfs.return_percentiles })
 
 function optionSummary(t) {
   if (t.asset_class !== 'Options') return ''
