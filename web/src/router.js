@@ -8,7 +8,6 @@ export default createRouter({
     { path: '/members', name: 'members', component: () => import('./pages/Members.vue') },
     { path: '/members/:id', name: 'member', component: () => import('./pages/Member.vue'), props: true },
     { path: '/trades', name: 'trades', component: () => import('./pages/Trades.vue') },
-    { path: '/methodology', name: 'methodology', component: () => import('./pages/Methodology.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

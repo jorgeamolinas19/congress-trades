@@ -9,6 +9,8 @@
       </p>
     </div>
 
+    <CoverageNote class="max-w-3xl" />
+
     <div class="flex flex-wrap items-end gap-3">
       <TextInput v-model="q" placeholder="Search member or state…" class="w-full sm:w-64" aria-label="Search members" />
       <Select v-model="chamber" :options="chamberOpts" class="w-36" aria-label="Chamber" />
@@ -68,6 +70,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Checkbox, Select, TabButtons, TextInput } from 'frappe-ui'
 import VerdictBadge from '../components/VerdictBadge.vue'
+import CoverageNote from '../components/CoverageNote.vue'
 import { getMembers } from '../lib/data'
 import { excessClass, memberTag, pct, signedPct, tstat } from '../lib/format'
 

@@ -14,6 +14,8 @@
       </p>
     </section>
 
+    <CoverageNote class="max-w-3xl" />
+
     <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
       <StatTile label="Copying at disclosure" :value="`${pct(filing.ann_return)} / yr`"
         :sub="`Factor alpha ${signedPct(filingReg.alpha_ann)} (t = ${tstat(filingReg.alpha_t)})`" />
@@ -97,6 +99,7 @@ import { Badge, Button } from 'frappe-ui'
 import StatTile from '../components/StatTile.vue'
 import GrowthChart from '../components/GrowthChart.vue'
 import MiniBoard from '../components/MiniBoard.vue'
+import CoverageNote from '../components/CoverageNote.vue'
 import { getMembers, getSummary } from '../lib/data'
 import { date, num, pct, signedPct, tstat } from '../lib/format'
 

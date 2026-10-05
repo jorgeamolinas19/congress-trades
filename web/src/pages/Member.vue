@@ -14,6 +14,8 @@
       </div>
     </div>
 
+    <CoverageNote />
+
     <section class="grid md:grid-cols-2 gap-3">
       <div v-for="v in views" :key="v.key" class="rounded-lg border border-outline-gray-2 p-4">
         <div class="text-sm text-ink-gray-5">{{ v.question }}</div>
@@ -108,7 +110,7 @@
       <p class="mt-3 text-sm text-ink-gray-5 leading-relaxed">
         "6 mo vs SPY" is the stock's return over the six months after the trade date minus SPY's return over the
         same period. For a sale, a negative number means the stock lagged after they sold, which was a good
-        sale. Stock options, bonds and funds are not included.
+        sale.
       </p>
     </section>
   </div>
@@ -120,6 +122,7 @@ import { Badge, Button, TabButtons, TextInput } from 'frappe-ui'
 import StatTile from '../components/StatTile.vue'
 import GrowthChart from '../components/GrowthChart.vue'
 import VerdictBadge from '../components/VerdictBadge.vue'
+import CoverageNote from '../components/CoverageNote.vue'
 import { getMember } from '../lib/data'
 import { date, excessClass, money, num, pct, signedPct, tstat } from '../lib/format'
 

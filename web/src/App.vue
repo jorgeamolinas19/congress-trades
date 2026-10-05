@@ -28,7 +28,7 @@
       <div class="mx-auto max-w-6xl px-4 py-6 flex flex-wrap gap-x-6 gap-y-2">
         <span>Data: House Clerk &amp; Senate eFD periodic transaction reports, yfinance, Ken French Data Library.</span>
         <span>Not investment advice.</span>
-        <a class="underline hover:text-ink-gray-8" href="https://github.com/jorgeamolinas19/congress-trades" target="_blank" rel="noopener">Source &amp; methodology on GitHub</a>
+        <a class="underline hover:text-ink-gray-8" href="https://github.com/jorgeamolinas19/congress-trades" target="_blank" rel="noopener">Source on GitHub</a>
       </div>
     </footer>
   </div>
@@ -43,6 +43,5 @@ const links = [
   { to: '/', label: 'Overview', exact: true },
   { to: '/members', label: 'Members' },
   { to: '/trades', label: 'Latest trades' },
-  { to: '/methodology', label: 'Methodology' },
 ]
 </script>
