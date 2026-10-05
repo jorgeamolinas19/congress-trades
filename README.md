@@ -1,5 +1,8 @@
 # Can you profit by copying Congress's stock trades?
 
+**Live tracker: [congress-trades-roan.vercel.app](https://congress-trades-roan.vercel.app)**, with every
+member's record vs. the market, their trades, and the full study.
+
 **Short answer: no.** Members of Congress must disclose their stock trades within
 45 days. This repo builds the full dataset from the official House and Senate
 filings: **43,525 common-stock trades by 289 members, 2014–2026**. It then tests
@@ -113,6 +116,18 @@ pytest
 Raw filings and price caches (`data/raw`, `data/interim`) are git-ignored and
 re-downloadable. The cleaned trades and every results table are committed.
 
+## Website
+
+`web/` is a Vue 3 + Vite site built on [frappe-ui](https://github.com/frappe/frappe-ui), the component
+library behind [Frappe Builder](https://github.com/frappe/builder). It is fully static, reading JSON exported
+by `python -m congress.site_data`, and is hosted on Vercel.
+
+```bash
+python -m congress.site_data          # refresh web/public/data/ from the study outputs
+cd web && npm install && npm run dev  # local preview
+npx vercel deploy --prod              # from web/
+```
+
 ## Layout
 
 ```
@@ -129,5 +144,6 @@ src/congress/
   study.py           runs everything -> reports/results/
   plots.py           figures -> reports/figures/
   validate.py        Senate cross-check, 50-trade spot-check sample
+  site_data.py       per-member stats + JSON export for the website
 tests/               parser, portfolio-timing and statistics tests
 ```
