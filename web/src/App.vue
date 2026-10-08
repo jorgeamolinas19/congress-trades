@@ -11,29 +11,32 @@
             <span class="font-mono tracking-tight lg:hidden">C<span class="text-ink-green-6">/</span>T</span>
           </router-link>
 
-          <nav class="hidden md:flex items-center gap-0.5 ml-2" aria-label="Main">
+          <nav class="hidden lg:flex items-center gap-0.5 ml-2" aria-label="Main">
             <router-link v-for="l in links" :key="l.to" :to="l.to" class="nav-link" :class="{ active: isActive(l) }">{{ l.label }}</router-link>
           </nav>
 
-          <MemberSearch class="ml-auto hidden md:block w-64" />
+          <MemberSearch class="ml-auto hidden lg:block lg:w-44 xl:w-64" />
 
           <!-- A plain link, not a router-link: a full page load is what makes the
                browser show the password prompt for the protected page. -->
-          <a href="/picks" class="nav-link hidden md:inline-flex items-center gap-1" :class="{ active: route.name === 'picks' }"
+          <a href="/picks" class="nav-link hidden lg:inline-flex items-center gap-1" :class="{ active: route.name === 'picks' }"
             title="Private page, password required"><span aria-hidden="true">🔒</span> Picks</a>
+          <a href="/agents" class="nav-link hidden lg:inline-flex items-center gap-1" :class="{ active: route.name === 'agents' }"
+            title="Private page, password required"><span aria-hidden="true">🔒</span> Agents</a>
 
-          <Button variant="ghost" class="ml-auto md:ml-0" :tooltip="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+          <Button variant="ghost" class="ml-auto lg:ml-0" :tooltip="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
             :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggle">
             <span aria-hidden="true">{{ theme === 'dark' ? '☀' : '☾' }}</span>
           </Button>
         </div>
 
         <!-- Phone: the search gets its own row and the sections scroll sideways. -->
-        <div class="md:hidden pb-2 space-y-2">
+        <div class="lg:hidden pb-2 space-y-2">
           <MemberSearch class="w-full" :show-hint="false" />
           <nav class="flex gap-0.5 overflow-x-auto -mx-4 px-4 pb-1" aria-label="Main">
             <router-link v-for="l in links" :key="l.to" :to="l.to" class="nav-link whitespace-nowrap" :class="{ active: isActive(l) }">{{ l.label }}</router-link>
             <a href="/picks" class="nav-link whitespace-nowrap" :class="{ active: route.name === 'picks' }"><span aria-hidden="true">🔒</span> Picks</a>
+            <a href="/agents" class="nav-link whitespace-nowrap" :class="{ active: route.name === 'agents' }"><span aria-hidden="true">🔒</span> Agents</a>
           </nav>
         </div>
       </div>
@@ -91,7 +94,7 @@ onMounted(() => getSummary().then((s) => { dataThrough.value = s.data_through })
 
 <style scoped>
 .nav-link {
-  @apply px-2.5 py-1.5 rounded-2 font-mono text-sm tracking-wide text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9;
+  @apply px-2.5 py-1.5 rounded-2 font-mono text-sm tracking-wide whitespace-nowrap text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9;
 }
 .nav-link.active {
   @apply bg-surface-gray-3 text-ink-gray-9;

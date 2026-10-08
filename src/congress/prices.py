@@ -69,6 +69,32 @@ def _tomorrow() -> str:
     return (pd.Timestamp.today().normalize() + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 
 
+def merge_history(old: pd.Series, new: pd.Series) -> pd.Series:
+    """Combine an existing price history with a fresh download of the same stock.
+
+    A full re-download replaces the old history only when it covers all of it
+    (it then also picks up dividend re-basing). Yahoo sometimes returns a
+    truncated or partial series; replacing a long history with it silently
+    deletes years of data. In that case the old history is kept and only the
+    newer days are spliced on, scaled to the old price basis at their last
+    common day. With nothing to anchor on, the old history is left untouched.
+    """
+    old, new = old.dropna(), new.dropna()
+    if new.empty:
+        return old
+    if old.empty:
+        return new
+    in_range = new.loc[old.index.min():old.index.max()]
+    if new.index.min() <= old.index.min() + pd.Timedelta(days=7) and len(in_range) >= 0.98 * len(old):
+        return new
+    common = old.index.intersection(new.index)
+    if len(common) == 0:
+        return old
+    anchor = common.max()
+    tail = new.loc[new.index > old.index.max()] * (old[anchor] / new[anchor])
+    return pd.concat([old, tail])
+
+
 def refresh(symbols: list[str], start: str = "2013-01-01", chunk: int = 100) -> int:
     """Re-download full adjusted history for `symbols` in batches and replace
     them in the cache. Used daily for recently traded symbols (a full
@@ -90,9 +116,10 @@ def refresh(symbols: list[str], start: str = "2013-01-01", chunk: int = 100) -> 
         close = data["Close"] if isinstance(data.columns, pd.MultiIndex) else data[["Close"]].set_axis(batch, axis=1)
         close.index = close.index.tz_localize(None).normalize()
         good = [c for c in close.columns if close[c].notna().sum() > 0]
+        merged = {c: merge_history(px[c], close[c]) for c in good}
         px = px.reindex(px.index.union(close.index))
-        for c in good:
-            px[c] = close[c].reindex(px.index)
+        for c, series in merged.items():
+            px[c] = series.reindex(px.index)
         updated += len(good)
     px.sort_index().to_parquet(PRICES_PATH)
     return updated

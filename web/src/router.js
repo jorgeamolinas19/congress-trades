@@ -10,6 +10,7 @@ const router = createRouter({
     { path: '/members', name: 'members', component: () => import('./pages/Members.vue'), meta: { title: 'Members' } },
     { path: '/members/:id', name: 'member', component: () => import('./pages/Member.vue'), props: true },
     { path: '/trades', name: 'trades', component: () => import('./pages/Trades.vue'), meta: { title: 'Latest trades' } },
+    { path: '/agents', name: 'agents', component: () => import('./pages/Agents.vue'), meta: { title: 'Agent desk' } },
     { path: '/other', name: 'other', component: () => import('./pages/Other.vue'), meta: { title: 'Options, bonds & funds' } },
     { path: '/picks', name: 'picks', component: () => import('./pages/Picks.vue'), meta: { title: 'Your picks' } },
     { path: '/methodology', redirect: '/' },

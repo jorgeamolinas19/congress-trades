@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write   # only to push the encrypted agent-desk state to its own branch
 
 jobs:
   update:
@@ -29,7 +29,10 @@ jobs:
           cache: pip
 
       - name: Install
-        run: pip install -e . pandas numpy statsmodels scipy yfinance matplotlib requests beautifulsoup4 lxml pdfplumber pyarrow
+        # TradingAgents is pinned to a reviewed commit so an upstream change can't alter the job unannounced.
+        run: |
+          pip install -e . pandas numpy statsmodels scipy yfinance matplotlib requests beautifulsoup4 lxml pdfplumber pyarrow cryptography
+          pip install "git+https://github.com/TauricResearch/TradingAgents.git@1394a3f72aa4393e1a98f51b382434c4b4c2d972"
 
       - name: Restore filing and price caches
         uses: actions/cache/restore@v4
@@ -37,8 +40,8 @@ jobs:
           path: |
             data/raw
             data/interim
-          key: pipeline-data-${{ github.run_id }}
-          restore-keys: pipeline-data-
+          key: pipeline-data-v2-${{ github.run_id }}
+          restore-keys: pipeline-data-v2-
 
       - name: Seed caches from the data-seed release (first run only)
         if: hashFiles('data/interim/prices.parquet') == ''
@@ -49,8 +52,41 @@ jobs:
           tar -xzf seed.tar.gz && rm seed.tar.gz
           du -sh data/raw data/interim
 
-      - name: Update data and picks
+      - name: Restore agent-desk state (encrypted branch)
+        env:
+          AGENTS_STATE_KEY: ${{ secrets.AGENTS_STATE_KEY }}
+        run: |
+          mkdir -p data/private
+          if [ -z "$AGENTS_STATE_KEY" ]; then echo "AGENTS_STATE_KEY is not set; the agent desk starts fresh"; exit 0; fi
+          if git fetch --depth=1 origin agents-state 2>/dev/null; then
+            git show FETCH_HEAD:state.enc > data/private/agents_state.enc
+            python -m congress.secure_state decrypt data/private/agents_state.enc data/private/agents_state.json
+            echo "restored the agent-desk state"
+          else
+            echo "no saved agent-desk state yet"
+          fi
+
+      - name: Update data, picks and the agent desk
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python -u -m congress.daily
+
+      - name: Save agent-desk state (encrypted branch)
+        if: always()
+        env:
+          AGENTS_STATE_KEY: ${{ secrets.AGENTS_STATE_KEY }}
+        run: |
+          if [ -z "$AGENTS_STATE_KEY" ] || [ ! -f data/private/agents_state.json ]; then echo "nothing to save"; exit 0; fi
+          python -m congress.secure_state encrypt data/private/agents_state.json "$RUNNER_TEMP/state.enc"
+          blob=$(git hash-object -w "$RUNNER_TEMP/state.enc")
+          tree=$(printf '100644 blob %s\tstate.enc\n' "$blob" | git mktree)
+          parent=$(git ls-remote origin refs/heads/agents-state | cut -f1)
+          args=""
+          if [ -n "$parent" ]; then git fetch --depth=1 origin agents-state && args="-p $parent"; fi
+          commit=$(git -c user.name=daily-bot -c user.email=daily-bot@users.noreply.github.com commit-tree "$tree" $args -m "agent state $(date -u +%F)")
+          git push origin "$commit:refs/heads/agents-state"
+          echo "saved the encrypted agent-desk state"
 
       - name: Save caches
         if: always()
@@ -59,7 +95,7 @@ jobs:
           path: |
             data/raw
             data/interim
-          key: pipeline-data-${{ github.run_id }}
+          key: pipeline-data-v2-${{ github.run_id }}
 
       - name: Deploy to Vercel
         if: env.HAS_VERCEL_TOKEN == 'true'
@@ -78,10 +114,14 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           sleep 20
-          code=$(curl -s -o /dev/null -w '%{http_code}' "https://congress-trades-roan.vercel.app/picks/recs.json?check=$GITHUB_RUN_ID")
-          echo "unauthenticated /picks/recs.json -> $code"
-          if [ "$code" != "401" ]; then
-            echo "::error::Picks data is reachable without the password ($code). Redeploying without it."
+          bad=0
+          for path in /picks/recs.json /picks/agents.json /agents; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://congress-trades-roan.vercel.app$path?check=$GITHUB_RUN_ID")
+            echo "unauthenticated $path -> $code"
+            if [ "$code" != "401" ]; then bad=1; fi
+          done
+          if [ "$bad" != "0" ]; then
+            echo "::error::Private data is reachable without the password. Redeploying without it."
             rm -rf web/public/picks
             (cd web && npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN")
             exit 1

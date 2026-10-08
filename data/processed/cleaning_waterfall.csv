@@ -1,14 +1,14 @@
 step,rows_remaining
-raw transaction rows,72060
-drop exchanges / unknown type,71365
-"drop options, bonds, funds, other non-stock",56678
-drop rows with no usable ticker,54935
-drop unparseable dates,54935
-drop impossible dates (filed before trade or >3y late),54585
-drop trades before 2014,54548
-drop unparseable amounts,54548
-drop duplicate rows (amendments / repeated lines),50503
-[price] drop tickers with no yfinance data (delisted / unknown),44858
-"[price] drop ETFs, funds and other non-equity per yfinance",44375
-[price] drop tickers with no price history on the trade date,43875
-[price] drop filed-name vs priced-name mismatches (recycled tickers),43520
+raw transaction rows,72069
+drop exchanges / unknown type,71374
+"drop options, bonds, funds, other non-stock",56685
+drop rows with no usable ticker,54942
+drop unparseable dates,54942
+drop impossible dates (filed before trade or >3y late),54592
+drop trades before 2014,54555
+drop unparseable amounts,54555
+drop duplicate rows (amendments / repeated lines),50510
+[price] drop tickers with no yfinance data (delisted / unknown),44865
+"[price] drop ETFs, funds and other non-equity per yfinance",44382
+[price] drop tickers with no price history on the trade date,43882
+[price] drop filed-name vs priced-name mismatches (recycled tickers),43527

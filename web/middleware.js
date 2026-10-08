@@ -1,9 +1,9 @@
-// Vercel Routing Middleware: HTTP Basic Auth in front of the private picks page
-// and its data. The password lives in the PICKS_PASSWORD environment variable
+// Vercel Routing Middleware: HTTP Basic Auth in front of the private picks and agent pages
+// and their data (both live under /picks/ or /agents). The password lives in the PICKS_PASSWORD environment variable
 // on Vercel, never in this repo. Any username is accepted.
 import { next } from '@vercel/functions'
 
-export const config = { matcher: ['/picks', '/picks/:path*'] }
+export const config = { matcher: ['/picks', '/picks/:path*', '/agents'] }
 
 const unauthorized = () =>
   new Response('Password required.', {

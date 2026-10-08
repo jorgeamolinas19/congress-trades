@@ -135,6 +135,12 @@ by `python -m congress.site_data`, and is hosted on Vercel.
   top-rated group beat SPY out of sample with t >= 2. Right now it doesn't (t = 1.8), so the best calls are
   "Watch". The picks JSON is git-ignored and never enters this public repo.
 
+- **Agent desk** (`/agents`, same password): [TradingAgents](https://github.com/TauricResearch/TradingAgents)
+  (analysts, a bull/bear debate, a trader and a risk manager built on LangGraph) reviews new congressional
+  buys, and its five-tier rating is traded with **$1,000 of fake money**, next to $1,000 in SPY and $1,000
+  following the statistical picks. The page shows the equity curves, open and closed positions, each call's
+  full reasoning, and the month's LLM spend. See below.
+
 Search any member from any page with `/`. Light and dark mode, phone-width layouts.
 
 ```bash
@@ -144,6 +150,26 @@ cd web && npm install && npm run dev  # local preview (no password locally)
 npx vercel deploy --prod              # from web/
 ```
 
+### Agent desk
+
+`congress.agents` runs TradingAgents (pinned to a reviewed commit) on the best new disclosed buys each day, and
+`congress.paper` replays the decisions as a paper account:
+
+- **Rules:** Buy/Overweight puts $100 into the stock (max 10 positions, one per stock, no leverage or shorting);
+  Sell/Underweight closes it; Hold does nothing; positions close after 20 trading days. Every fill is at the
+  close of the first trading day *after* the analysis date, with 0.1% slippage, so a call never trades on
+  prices it could already see. The account is recomputed from the decision list each time, never stored.
+- **Cost control ($5/month):** every LLM call is metered by `BudgetGuard` (tokens x list price x 1.25 safety margin).
+  A run aborts the moment it passes its per-run ceiling (tested through a real parallel LangGraph), no run starts
+  unless it fits under 95% of the monthly cap, and spend is paced evenly across the month. A failure before any
+  model call (e.g. an account with no credits) is logged and stops the day's loop; it is never recorded as a decision.
+  Keep prepaid credit on the OpenAI account small as the real backstop.
+- **Privacy:** results are written to `web/public/picks/agents.json` (git-ignored, served behind the password).
+  The running state (decisions, ledger) lives encrypted with Fernet on an `agents-state` branch, so it is durable
+  and versioned but unreadable without `AGENTS_STATE_KEY`.
+- **Honesty:** a handful of trades a month is mostly luck for a long time. The page says so, keeps every call as
+  made, and never re-runs one to change an answer.
+
 ### Daily update
 
 `.github/workflows/daily.yml` runs `python -m congress.daily` every morning before the US open: new House and
@@ -151,7 +177,9 @@ Senate filings, fresh prices for recently traded tickers, non-stock trades, site
 deploy and a check that `/picks/recs.json` still returns 401 without the password. Filing and price caches
 persist in the Actions cache; the first run seeds them from the `data-seed` release asset instead of
 re-scraping 2014–2026. The study itself (regressions, robustness, figures) re-runs when the Ken French factor
-files publish a new month. Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
+files publish a new month. Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `OPENAI_API_KEY`,
+`AGENTS_STATE_KEY`, and optionally `FRED_API_KEY` (macro data for TradingAgents; skipped when absent).
+Vercel's own git-triggered builds are switched off (`vercel.json`), since the private pages' data never goes through git.
 
 ## Layout
 
@@ -174,5 +202,8 @@ src/congress/
   odds.py            copy hit rates, luck-adjusted member odds, bad-case percentiles
   recs.py            Buy/Watch/Don't-buy model, out-of-sample backtest, private picks JSON
   daily.py           incremental daily update used by the GitHub Action
+  agents.py          TradingAgents runner, budget guard, candidate selection, private export
+  paper.py           the $1,000 paper-account simulator (fills, exits, equity curves)
+  secure_state.py    Fernet encrypt/decrypt for the agent-desk state
 tests/               parser, portfolio-timing and statistics tests
 ```

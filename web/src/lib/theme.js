@@ -15,5 +15,5 @@ export function useTheme() {
 // orange = trade-date (member's own timing), blue = filing-date (copier), gray = SPY.
 export const seriesColors = (theme) =>
   theme === 'dark'
-    ? { trade: '#d95926', filing: '#3987e5', spy: '#8d8c88' }
-    : { trade: '#eb6834', filing: '#2a78d6', spy: '#8d8c88' }
+    ? { trade: '#d95926', filing: '#3987e5', spy: '#8d8c88', agents: '#2fbf8a', stats: '#3987e5' }
+    : { trade: '#eb6834', filing: '#2a78d6', spy: '#8d8c88', agents: '#1baf7a', stats: '#2a78d6' }

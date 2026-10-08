@@ -13,7 +13,7 @@ import time
 
 import pandas as pd
 
-from . import clean, dataset, other_assets, prices, recs, scrape_house, scrape_senate, site_data, study
+from . import agents, clean, dataset, other_assets, prices, recs, scrape_house, scrape_senate, site_data, study
 from .config import PROCESSED
 from .factors import load_factors
 
@@ -57,6 +57,13 @@ def main() -> None:
     step("Site data", site_data.main)
     out = step("Picks", recs.build, asof=pd.Timestamp.today().normalize())
     print(f"    picks as of {out['asof']}: {out['counts']} (validated={out['model']['validated']})", flush=True)
+
+    # The agent desk is optional and paid; whatever goes wrong there must not stop the update.
+    try:
+        res = step("Agent desk (paper trading)", agents.run_daily, out)
+        print(f"    {res}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"    agent desk failed ({type(e).__name__}: {e}); the rest of the update is unaffected", flush=True)
 
 
 if __name__ == "__main__":
