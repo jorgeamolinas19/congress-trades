@@ -99,12 +99,11 @@ jobs:
 
       - name: Deploy to Vercel
         if: env.HAS_VERCEL_TOKEN == 'true'
-        working-directory: web
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+        run: python scripts/vercel_deploy.py
 
       - name: Check the picks are still password-protected
         if: env.HAS_VERCEL_TOKEN == 'true'
@@ -123,7 +122,7 @@ jobs:
           if [ "$bad" != "0" ]; then
             echo "::error::Private data is reachable without the password. Redeploying without it."
             rm -rf web/public/picks
-            (cd web && npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN")
+            python scripts/vercel_deploy.py
             exit 1
           fi
 
