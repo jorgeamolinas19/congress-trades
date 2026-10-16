@@ -317,3 +317,33 @@ def test_load_returns_removes_bad_ticks_but_keeps_real_crashes(tmp_path, monkeyp
     assert r.CRASH.iloc[2] == pytest.approx(-0.8)
     assert np.isnan(r.STITCH.iloc[2]) and r.STITCH.iloc[3] == pytest.approx(0.05)
     assert r.PENNY.iloc[1] == pytest.approx(-0.5) and r.PENNY.iloc[2:].isna().all()
+
+
+def test_itm_chance_behaves_like_an_option():
+    from congress.recs import itm_chance
+    atm = itm_chance(100, 100, 365, 0.3, "Call")
+    assert 0.40 < atm < 0.50                                  # lognormal drift pulls the median below spot
+    assert itm_chance(100, 100, 365, 0.3, "Put") == pytest.approx(1 - atm)
+    assert itm_chance(100, 150, 30, 0.2, "Call") < 0.01        # far out, little time: near zero
+    assert itm_chance(100, 50, 30, 0.2, "Call") > 0.99         # deep in the money
+    assert itm_chance(100, 120, 365, 0.5, "Call") > itm_chance(100, 120, 365, 0.2, "Call")  # more vol, more chance
+    assert np.isnan(itm_chance(100, 100, 0, 0.3, "Call"))
+
+
+def test_option_view_verdicts():
+    from types import SimpleNamespace
+    from congress.recs import option_view
+    cal = pd.bdate_range("2025-01-01", periods=300)
+    rng = np.random.default_rng(1)
+    px = pd.DataFrame({"X": 100 * np.exp(np.cumsum(rng.normal(0, 0.015, 300)))}, index=cal)
+    asof, spot = cal[-1], float(px.X.iloc[-1])
+    opt = lambda strike, kind, days: (SimpleNamespace(ticker="X", strike=strike, option_type=kind, tx_date=cal[-20]),
+                                      asof + pd.Timedelta(days=days))
+    rec, view, reasons = option_view(*opt(spot * 0.98, "Call", 90)[:1], px, asof, opt(0, "", 90)[1])
+    assert rec == "watch" and view["moneyness"] > 0 and view["itm_chance"] > 0.5
+    rec, view, reasons = option_view(*opt(spot * 2, "Call", 60)[:1], px, asof, opt(0, "", 60)[1])
+    assert rec == "dont_buy" and view["itm_chance"] < 0.25 and "lottery" in reasons[0]
+    rec, _, reasons = option_view(*opt(spot, "Put", 7)[:1], px, asof, opt(0, "", 7)[1])
+    assert rec == "dont_buy" and "too little time" in reasons[0]
+    assert option_view(SimpleNamespace(ticker="X", strike=np.nan, option_type="Call", tx_date=cal[-20]),
+                       px, asof, asof + pd.Timedelta(days=30)) is None

@@ -28,7 +28,7 @@
         </template>
       </Alert>
 
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <button v-for="g in groupTiles" :key="g.key" class="text-left rounded-lg border p-4 transition-colors"
           :class="tab === g.key ? 'border-outline-gray-5 bg-surface-gray-1' : 'border-outline-gray-2 hover:bg-surface-gray-1'"
           :aria-pressed="tab === g.key" @click="tab = g.key">
@@ -40,13 +40,27 @@
 
       <RiskSettings />
 
-      <div class="rounded-lg border border-outline-gray-2 p-3 text-sm text-ink-gray-7">
+      <div v-if="tab === 'picks'" class="rounded-lg border border-outline-gray-2 p-3 text-sm text-ink-gray-7">
         If you bought every {{ m.validated ? 'Buy' : 'Watch' }} pick at the suggested size:
         <strong class="text-ink-gray-9 num">{{ usd(totalIn) }}</strong> invested
         ({{ pct(totalIn / Math.max(1, Number(risk.portfolio)), 0) }} of your portfolio), with up to
         <strong class="text-ink-gray-9 num">{{ usd(totalRisk) }}</strong> at risk in a bad case.
         <span v-if="totalIn > Number(risk.portfolio) * 0.5" class="text-ink-amber-7">That is a lot in one strategy; consider fewer picks.</span>
       </div>
+
+      <Alert v-if="tab === 'options'" theme="blue" title="Should you buy this option?">
+        <template #description>
+          Each option a member bought gets the chance it finishes in the money (worth something at expiry), from the
+          stock's price today, the strike, the days left and how much the stock moved over the past year.
+          <template v-if="om.n >= 20">
+            That chance has held up: of {{ num(om.n) }} past option buys, it predicted {{ pct(om.predicted, 0) }} would finish in
+            the money and {{ pct(om.realized, 0) }} did.
+          </template>
+          <strong>Don't buy</strong> means under {{ pct(om.min_itm, 0) }} or less than {{ om.min_days }} days left.
+          The rest are <strong>Watch</strong>, never Buy: you'd pay a premium this page can't see, so in the money
+          isn't the same as profitable, and copying members isn't a proven edge.
+        </template>
+      </Alert>
 
       <ul class="space-y-3">
         <li v-for="(r, i) in shown" :key="i" class="rounded-lg border border-outline-gray-2 p-4">
@@ -65,12 +79,17 @@
                 <span v-if="r.option"> · {{ optionText(r.option) }}</span>
               </div>
             </div>
-            <div v-if="r.confidence !== undefined" class="ml-auto text-right">
+            <div v-if="r.option && r.option.itm_chance !== undefined" class="ml-auto text-right">
+              <div class="text-sm text-ink-gray-5">Chance it finishes in the money</div>
+              <div class="text-xl font-semibold num text-ink-gray-9">{{ pct(r.option.itm_chance, 0) }}</div>
+              <div class="text-xs text-ink-gray-5 num">{{ r.option.days_left }} days left · stock {{ usd(r.option.spot) }}</div>
+            </div>
+            <div v-else-if="r.confidence !== undefined" class="ml-auto text-right">
               <div class="text-sm text-ink-gray-5">Chance it beats SPY (6 mo)</div>
               <div class="text-xl font-semibold num text-ink-gray-9">{{ pct(r.confidence, 0) }}</div>
               <div class="text-xs text-ink-gray-5 num">similar trades averaged {{ signedPct(r.expected_excess_6m) }} vs SPY</div>
             </div>
-            <div v-if="sized(r)" class="text-right" :class="r.confidence === undefined ? 'ml-auto' : ''">
+            <div v-if="sized(r)" class="text-right" :class="r.confidence === undefined && !r.option?.itm_chance ? 'ml-auto' : ''">
               <div class="text-sm text-ink-gray-5">{{ r.rec === 'not_rated' ? 'Most to put in, if you buy' : 'Put in at most' }}</div>
               <div class="text-xl font-semibold num text-ink-gray-9" :title="sized(r).reason">{{ sized(r).short }}</div>
             </div>
@@ -119,7 +138,14 @@ const REC = {
   expired: { label: 'Expired', theme: 'gray', variant: 'subtle' },
   'n/a': { label: 'n/a', theme: 'gray', variant: 'subtle' },
 }
-const GROUPS = { picks: ['buy', 'watch'], sell: ['sell_if_owned'], dont: ['dont_buy'], other: ['not_rated', 'expired', 'n/a'] }
+const isOption = (r) => r.asset_class === 'Options' && r.side === 'buy'
+const GROUPS = {
+  picks: (r) => !isOption(r) && ['buy', 'watch'].includes(r.rec),
+  options: isOption,
+  sell: (r) => r.rec === 'sell_if_owned',
+  dont: (r) => !isOption(r) && r.rec === 'dont_buy',
+  other: (r) => !isOption(r) && ['not_rated', 'expired', 'n/a'].includes(r.rec),
+}
 
 const d = ref(null)
 const error = ref('')
@@ -133,20 +159,22 @@ onMounted(async () => {
 })
 
 const m = computed(() => d.value.model)
-const count = (g) => (d.value?.rows || []).filter((r) => GROUPS[g].includes(r.rec)).length
+const om = computed(() => d.value.options_model || { n: 0 })
+const count = (g) => (d.value?.rows || []).filter(GROUPS[g]).length
 const groupTiles = computed(() => [
   { key: 'picks', label: m.value?.validated ? 'Buy' : 'Watch', sub: m.value?.validated ? 'Passed the test' : 'Top-rated, unproven edge' },
+  { key: 'options', label: 'Options', sub: 'Should you buy it?' },
   { key: 'sell', label: 'Sell if you own it', sub: 'Members sold these' },
   { key: 'dont', label: "Don't buy", sub: 'Low-rated or filed late' },
-  { key: 'other', label: 'Not rated', sub: 'Options, funds, expired, n/a' },
+  { key: 'other', label: 'Not rated', sub: 'Funds, bonds, other' },
 ])
-const shown = computed(() => (d.value?.rows || []).filter((r) => GROUPS[tab.value].includes(r.rec)))
+const shown = computed(() => (d.value?.rows || []).filter(GROUPS[tab.value]))
 
 function sized(r) {
   if (!['buy', 'watch', 'not_rated'].includes(r.rec) || r.side !== 'buy') return null
   return sizeTrade({ assetClass: r.asset_class, side: 'buy', percentiles: r.percentiles || d.value.base_percentiles })
 }
-const picks = computed(() => (d.value?.rows || []).filter((r) => GROUPS.picks.includes(r.rec)))
+const picks = computed(() => (d.value?.rows || []).filter(GROUPS.picks))
 const totalIn = computed(() => picks.value.reduce((s, r) => s + (sized(r)?.amount || 0), 0))
 const totalRisk = computed(() => {
   const tol = TOLERANCES[risk.tolerance] || TOLERANCES.moderate

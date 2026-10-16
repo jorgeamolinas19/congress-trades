@@ -30,6 +30,7 @@ daily) and deployed straight to the public site.
 from __future__ import annotations
 
 import json
+import math
 import re
 
 import numpy as np
@@ -240,6 +241,117 @@ def _expiry(x) -> pd.Timestamp | None:
     return d + pd.offsets.MonthEnd(0) if re.fullmatch(r"[A-Za-z]{3} \d{4}", x.strip()) else d
 
 
+# --------------------------------------------------------------------------- #
+# Options
+# --------------------------------------------------------------------------- #
+OPT_MIN_DAYS = 14        # less time than this and there is no room to be right
+OPT_MIN_ITM = 0.25       # under this chance of finishing in the money: a lottery ticket
+
+
+def itm_chance(spot: float, strike: float, days: float, vol: float, kind: str) -> float:
+    """Chance a call (put) finishes above (below) its strike, if the stock moves
+    like a lognormal random walk with this annual volatility and no drift.
+
+    It ignores the premium, so it is the chance of being worth *something* at
+    expiry, not of making money. Break-even is further out by the premium.
+    """
+    if not (spot > 0 and strike > 0 and vol > 0 and days > 0):
+        return float("nan")
+    s = vol * math.sqrt(days / 365)
+    d2 = (math.log(spot / strike) - s * s / 2) / s
+    p = 0.5 * (1 + math.erf(d2 / math.sqrt(2)))       # P(finish above strike)
+    return p if kind == "Call" else 1 - p
+
+
+def _vol(series: pd.Series, i: int) -> float:
+    """Annualised volatility from the year of daily closes up to row i."""
+    r = np.log(series.iloc[max(0, i - 252):i + 1]).diff().dropna()
+    return float(r.std() * math.sqrt(252)) if len(r) >= 60 else float("nan")
+
+
+def option_backtest(other: pd.DataFrame, px: pd.DataFrame, asof: pd.Timestamp) -> dict:
+    """Did past option buys finish in the money as often as `itm_chance` said?
+
+    For every expired, fully parsed option a member bought: the chance at a
+    copier's entry (close of the day after filing), and whether the stock
+    closed past the strike on the expiry date. No option prices are needed,
+    which is why this is the one thing about options that can be checked.
+    """
+    cal = px.index
+    rows = []
+    for r in other[(other.asset_class == "Options") & (other.side == "buy")].itertuples():
+        exp, sym = _expiry(r.expiry), prices.yf_symbol(r.ticker) if isinstance(r.ticker, str) else None
+        if exp is None or exp >= asof or sym not in px.columns or pd.isna(r.strike) or r.option_type not in ("Call", "Put"):
+            continue
+        i0 = cal.searchsorted(r.filing_date) + 1
+        i1 = cal.searchsorted(exp, side="right") - 1           # last close on or before expiry
+        if i0 >= i1 or i1 >= len(cal):
+            continue
+        s = px[sym]
+        spot, end = s.iloc[i0], s.iloc[i1]
+        p = itm_chance(spot, r.strike, (cal[i1] - cal[i0]).days, _vol(s, i0), r.option_type)
+        if np.isfinite(p) and np.isfinite(end):
+            rows.append({"p": p, "itm": (end > r.strike) if r.option_type == "Call" else (end < r.strike),
+                         "kind": r.option_type})
+    df = pd.DataFrame(rows)
+    if len(df) < 20:
+        return {"n": int(len(df))}
+    q = pd.qcut(df.p, 4, labels=False, duplicates="drop")
+    return {
+        "n": int(len(df)), "predicted": float(df.p.mean()), "realized": float(df.itm.mean()),
+        "realized_calls": float(df.itm[df.kind == "Call"].mean()), "realized_puts": float(df.itm[df.kind == "Put"].mean()),
+        "calibration": [{"predicted": float(df.p[q == k].mean()), "realized": float(df.itm[q == k].mean()),
+                         "n": int((q == k).sum())} for k in sorted(set(q))],
+    }
+
+
+def option_view(r, px: pd.DataFrame, asof: pd.Timestamp, exp: pd.Timestamp) -> tuple[str, dict, list[str]] | None:
+    """Verdict, numbers and reasons for one disclosed option buy, or None if it can't be assessed."""
+    sym = prices.yf_symbol(r.ticker) if isinstance(r.ticker, str) else None
+    if sym not in px.columns or pd.isna(r.strike) or r.option_type not in ("Call", "Put"):
+        return None
+    s = px[sym].dropna()
+    i = len(s.loc[:asof]) - 1
+    if i < 60:
+        return None
+    spot, strike, kind = float(s.iloc[i]), float(r.strike), r.option_type
+    days = int((exp - s.index[i]).days)
+    vol = _vol(s, i)
+    p = itm_chance(spot, strike, days, vol, kind)
+    at_trade = s.loc[:r.tx_date]
+    moved = spot / float(at_trade.iloc[-1]) - 1 if len(at_trade) else float("nan")
+    # Distance to the strike in the direction the option needs: + means it is already in the money.
+    gap = (spot / strike - 1) if kind == "Call" else (strike / spot - 1)
+    view = {"spot": spot, "days_left": days, "vol": vol, "itm_chance": p, "moneyness": gap, "moved_since_trade": moved}
+    side = "rise" if kind == "Call" else "fall"
+    reasons = [
+        (f"In the money: {r.ticker} at ${spot:,.2f} is {abs(gap):.0%} past the ${strike:,.0f} strike." if gap >= 0 else
+         f"Out of the money: {r.ticker} at ${spot:,.2f} needs to {side} {abs(gap):.0%} to reach the ${strike:,.0f} strike."),
+        (f"{days} days left. At its past year's volatility ({vol:.0%}), it stays in the money through expiry "
+         f"about {p:.0%} of the time." if gap >= 0 else
+         f"{days} days left. At its past year's volatility ({vol:.0%}), a {abs(gap):.0%} move by expiry "
+         f"has about a {p:.0%} chance."),
+    ]
+    if gap > 0.2:
+        reasons.append("Deep in the money: most of what you'd pay is the stock's own value, so this behaves like "
+                       "owning the stock with leverage. A high chance here doesn't mean a big gain.")
+    if np.isfinite(moved):
+        better = (moved > 0) == (kind == "Call")
+        reasons.append(f"Since the member bought, {r.ticker} has moved {moved:+.1%}"
+                       f"{', so this option likely costs more now than they paid' if better else ', so it is likely cheaper now than they paid'}.")
+    reasons.append("You also pay a premium, so breaking even needs a bigger move than this. Option prices aren't available here.")
+    if days < OPT_MIN_DAYS:
+        rec = "dont_buy"
+        reasons.insert(0, f"Expires in {days} days: too little time for the move it needs.")
+    elif not np.isfinite(p) or p < OPT_MIN_ITM:
+        rec = "dont_buy"
+        reasons.insert(0, f"Only about a {p:.0%} chance of finishing in the money: closer to a lottery ticket than a bet.")
+    else:
+        # Never "buy": copying isn't a proven edge even for stocks, and the price you'd pay is unknown.
+        rec = "watch"
+    return rec, view, reasons
+
+
 def _calibrated(p: float, calib: list[dict]) -> tuple[float, float]:
     """Map a model probability to the hit rate and mean excess that similarly
     scored trades actually achieved out of sample (nearest calibration bucket)."""
@@ -357,19 +469,26 @@ def build(asof: pd.Timestamp | None = None, news: bool = True) -> dict:
                 continue
             underlying = rb[rb.symbol == sym] if sym else rb.iloc[:0]
             extra = ([f"{r.ticker} stock itself is rated in the stock picks on this page."] if len(underlying) else [])
-            row(r, cls, rec="not_rated", news=nws, option=opt,
-                reasons=["Option prices are not available, so options are not rated. Sized as a total loss.", *extra])
+            v = option_view(r, px, asof, exp) if exp is not None else None
+            if v is None:
+                row(r, cls, rec="not_rated", news=nws, option=opt,
+                    reasons=["The filing doesn't give a usable strike, expiry or call/put, or the stock has no price history.", *extra])
+                continue
+            rec, view, reasons = v
+            row(r, cls, rec=rec, news=nws, option={**opt, **view}, reasons=[*reasons, *extra])
         elif cls == "Funds & ETFs":
             row(r, cls, rec="not_rated", reasons=["The model was built and tested on individual stocks, not funds."])
         else:
             row(r, cls, rec="n/a", reasons=["Not something an ordinary investor can easily buy, or no price data."])
 
     order = {"buy": 0, "watch": 1, "sell_if_owned": 2, "dont_buy": 3, "not_rated": 4, "expired": 5, "n/a": 6}
-    rows.sort(key=lambda x: (order[x["rec"]], -(x.get("confidence") or 0), x["filing_date"]))
+    rows.sort(key=lambda x: (order[x["rec"]], -(x.get("confidence") or (x.get("option") or {}).get("itm_chance") or 0), x["filing_date"]))
     out = {
         "generated": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
         "asof": asof.strftime("%Y-%m-%d"), "window_days": RECENT_DAYS, "late_filing_days": LATE_FILING_DAYS,
         "model": bt, "base_percentiles": base_pct,
+        "options_model": {**option_backtest(pd.read_parquet(PROCESSED / "other_trades.parquet"), px, asof),
+                          "min_days": OPT_MIN_DAYS, "min_itm": OPT_MIN_ITM},
         "counts": {k_: sum(r["rec"] == k_ for r in rows) for k_ in order},
         "rows": rows,
     }
