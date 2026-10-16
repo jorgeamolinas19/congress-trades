@@ -135,16 +135,16 @@ by `python -m congress.site_data`, and is hosted on Vercel.
 - **Latest trades** and **Options & more**: recent disclosures and the 13,756 non-stock trades (options with
   parsed call/put, strike and expiry; bonds; funds and ETFs; crypto; private holdings), built by
   `python -m congress.other_assets`. Shown as disclosed, not analyzed.
-- **Your picks** (`/picks`, password-protected via `web/middleware.js` and a `PICKS_PASSWORD` Vercel env var):
+- **Your picks** (`/picks`):
   a Buy / Watch / Don't buy call for every trade disclosed in the last 30 days, with a calibrated confidence,
   recent headlines and a dollar amount sized to the viewer's risk settings. Built by `python -m congress.recs`,
   which fits a logistic model on pre-2020 trades and tests it on a frozen 2021–2025 window; it only ever labels
   a trade "Buy" if the top-rated group beat SPY in that window with t >= 2 (month-clustered, Newey-West across
   months because six-month outcomes overlap). The window is frozen on purpose: re-testing the gate every day as
   data arrives would be repeated looks at one hypothesis. Right now it doesn't pass, so the best calls are
-  "Watch". The confidence shown is the realized out-of-sample hit rate of the score's calibration quintile. The picks JSON is git-ignored and never enters this public repo.
+  "Watch". The confidence shown is the realized out-of-sample hit rate of the score's calibration quintile. The picks JSON changes daily, so it is git-ignored and deployed straight to the site rather than committed.
 
-- **Agent desk** (`/agents`, same password): [TradingAgents](https://github.com/TauricResearch/TradingAgents)
+- **Agent desk** (`/agents`): [TradingAgents](https://github.com/TauricResearch/TradingAgents)
   (analysts, a bull/bear debate, a trader and a risk manager built on LangGraph) reviews new congressional
   buys, and its five-tier rating is traded with **$1,000 of fake money**, next to $1,000 in SPY and $1,000
   following the statistical picks. The page shows the equity curves, open and closed positions, each call's
@@ -154,8 +154,8 @@ Search any member from any page with `/`. Light and dark mode, phone-width layou
 
 ```bash
 python -m congress.site_data          # refresh web/public/data/ from the study outputs
-python -m congress.recs               # rebuild the private picks (web/public/picks/, git-ignored)
-cd web && npm install && npm run dev  # local preview (no password locally)
+python -m congress.recs               # rebuild the picks (web/public/picks/, git-ignored)
+cd web && npm install && npm run dev  # local preview
 npx vercel deploy --prod              # from web/
 ```
 
@@ -173,7 +173,7 @@ npx vercel deploy --prod              # from web/
   unless it fits under 95% of the monthly cap, and spend is paced evenly across the month. A failure before any
   model call (e.g. an account with no credits) is logged and stops the day's loop; it is never recorded as a decision.
   Keep prepaid credit on the OpenAI account small as the real backstop.
-- **Privacy:** results are written to `web/public/picks/agents.json` (git-ignored, served behind the password).
+- **State:** results are written to `web/public/picks/agents.json` (git-ignored, deployed with the site).
   The running state (decisions, ledger) lives encrypted with Fernet on an `agents-state` branch, so it is durable
   and versioned but unreadable without `AGENTS_STATE_KEY`.
 - **Honesty:** a handful of trades a month is mostly luck for a long time. The page says so, keeps every call as
@@ -183,12 +183,12 @@ npx vercel deploy --prod              # from web/
 
 `.github/workflows/daily.yml` runs `python -m congress.daily` every morning before the US open: new House and
 Senate filings, fresh prices for recently traded tickers, non-stock trades, site data and picks, then a Vercel
-deploy and a check that `/picks/recs.json` still returns 401 without the password. Filing and price caches
+deploy. Filing and price caches
 persist in the Actions cache; the first run seeds them from the `data-seed` release asset instead of
 re-scraping 2014–2026. The study itself (regressions, robustness, figures) re-runs when the Ken French factor
 files publish a new month. Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `OPENAI_API_KEY`,
 `AGENTS_STATE_KEY`, and optionally `FRED_API_KEY` (macro data for TradingAgents; skipped when absent).
-Vercel's own git-triggered builds are switched off (`vercel.json`), since the private pages' data never goes through git.
+Vercel's own git-triggered builds are switched off (`vercel.json`), since the picks and agent data never go through git.
 
 ## Layout
 

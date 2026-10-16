@@ -17,12 +17,8 @@
 
           <MemberSearch class="ml-auto hidden lg:block lg:w-44 xl:w-64" />
 
-          <!-- A plain link, not a router-link: a full page load is what makes the
-               browser show the password prompt for the protected page. -->
-          <a href="/picks" class="nav-link hidden lg:inline-flex items-center gap-1" :class="{ active: route.name === 'picks' }"
-            title="Private page, password required"><span aria-hidden="true">🔒</span> Picks</a>
-          <a href="/agents" class="nav-link hidden lg:inline-flex items-center gap-1" :class="{ active: route.name === 'agents' }"
-            title="Private page, password required"><span aria-hidden="true">🔒</span> Agents</a>
+          <router-link to="/picks" class="nav-link hidden lg:inline-flex" :class="{ active: route.name === 'picks' }">Picks</router-link>
+          <router-link to="/agents" class="nav-link hidden lg:inline-flex" :class="{ active: route.name === 'agents' }">Agents</router-link>
 
           <Button variant="ghost" class="ml-auto lg:ml-0" :tooltip="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
             :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggle">
@@ -35,8 +31,8 @@
           <MemberSearch class="w-full" :show-hint="false" />
           <nav class="flex gap-0.5 overflow-x-auto -mx-4 px-4 pb-1" aria-label="Main">
             <router-link v-for="l in links" :key="l.to" :to="l.to" class="nav-link whitespace-nowrap" :class="{ active: isActive(l) }">{{ l.label }}</router-link>
-            <a href="/picks" class="nav-link whitespace-nowrap" :class="{ active: route.name === 'picks' }"><span aria-hidden="true">🔒</span> Picks</a>
-            <a href="/agents" class="nav-link whitespace-nowrap" :class="{ active: route.name === 'agents' }"><span aria-hidden="true">🔒</span> Agents</a>
+            <router-link to="/picks" class="nav-link whitespace-nowrap" :class="{ active: route.name === 'picks' }">Picks</router-link>
+            <router-link to="/agents" class="nav-link whitespace-nowrap" :class="{ active: route.name === 'agents' }">Agents</router-link>
           </nav>
         </div>
       </div>

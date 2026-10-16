@@ -13,8 +13,8 @@ How it fits together
     Overweight invest $100 at the next close, Sell and Underweight close the
     position, Hold does nothing; positions are closed after 20 trading days.
   * The account is replayed from the decision list every time (never stored).
-  * The result goes to web/public/picks/agents.json, which is git-ignored and
-    served only behind the site's password.
+  * The result goes to web/public/picks/agents.json, which is git-ignored (it
+    changes daily) and deployed straight to the public site.
 
 Money
   Every LLM call is metered by `BudgetGuard` (tokens x list price x a 25%

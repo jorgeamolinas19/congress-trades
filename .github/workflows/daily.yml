@@ -1,6 +1,6 @@
 name: Daily update
 
-# New filings, fresh prices and news, rebuilt site data and private picks,
+# New filings, fresh prices and news, rebuilt site data and picks,
 # deployed to Vercel. Runs before the US market opens.
 on:
   schedule:
@@ -103,27 +103,6 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: python scripts/vercel_deploy.py
-
-      - name: Check the picks are still password-protected
-        if: env.HAS_VERCEL_TOKEN == 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          sleep 20
-          bad=0
-          for path in /picks/recs.json /picks/agents.json /agents; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://congress-trades-roan.vercel.app$path?check=$GITHUB_RUN_ID")
-            echo "unauthenticated $path -> $code"
-            if [ "$code" != "401" ]; then bad=1; fi
-          done
-          if [ "$bad" != "0" ]; then
-            echo "::error::Private data is reachable without the password. Redeploying without it."
-            rm -rf web/public/picks
-            python scripts/vercel_deploy.py
-            exit 1
-          fi
 
       - name: Remind that deploys are off
         if: env.HAS_VERCEL_TOKEN != 'true'

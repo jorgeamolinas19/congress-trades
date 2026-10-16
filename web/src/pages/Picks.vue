@@ -1,18 +1,12 @@
 <template>
   <div class="space-y-6">
     <PageHeader title="Your picks">
-      <span class="inline-flex items-center gap-1 rounded-2 bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7 mr-1">🔒 Private</span>
       A call for every trade disclosed in the last <span v-if="d">{{ d.window_days }}</span> days, sized to your risk
       settings<span v-if="d">. Prices as of {{ date(d.asof) }}, rebuilt {{ d.generated }}</span>. Older trades are left out:
       waiting after a disclosure didn't change outcomes, but trades filed late tended to lose.
     </PageHeader>
 
-    <div v-if="locked" class="rounded-lg border border-outline-gray-2 p-6 max-w-lg space-y-3">
-      <div class="font-medium text-ink-gray-9">This page needs the password</div>
-      <p class="text-sm text-ink-gray-6">Open it as a full page load so the browser can ask for it.</p>
-      <Button href="/picks" label="Sign in to picks" />
-    </div>
-    <ErrorState v-else-if="error" :message="error" />
+    <ErrorState v-if="error" :message="error" />
     <div v-else-if="!d" class="space-y-4" aria-busy="true">
       <Skeleton class="h-20 rounded-lg" /><Skeleton class="h-28 rounded-lg" />
       <Skeleton v-for="i in 3" :key="i" class="h-40 rounded-lg" />
@@ -108,7 +102,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { Alert, Badge, Button, Skeleton } from 'frappe-ui'
+import { Alert, Badge, Skeleton } from 'frappe-ui'
 import PageHeader from '../components/PageHeader.vue'
 import RiskSettings from '../components/RiskSettings.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -129,12 +123,10 @@ const GROUPS = { picks: ['buy', 'watch'], sell: ['sell_if_owned'], dont: ['dont_
 
 const d = ref(null)
 const error = ref('')
-const locked = ref(false)
 const tab = ref('picks')
 onMounted(async () => {
   try {
-    const r = await fetch('/picks/recs.json', { credentials: 'same-origin', cache: 'no-store' })
-    if (r.status === 401) { locked.value = true; return }
+    const r = await fetch('/picks/recs.json', { cache: 'no-store' })
     if (!r.ok) throw new Error(`Could not load picks (${r.status})`)
     d.value = await r.json()
   } catch (e) { error.value = e.message }
