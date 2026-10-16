@@ -1,18 +1,12 @@
 <template>
   <div class="space-y-6">
     <PageHeader title="Agent desk">
-      <span class="inline-flex items-center gap-1 rounded-2 bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7 mr-1">🔒 Private</span>
       An AI trading team (<a class="text-ink-blue-link hover:underline" href="https://github.com/TauricResearch/TradingAgents" target="_blank" rel="noopener">TradingAgents</a>:
       analysts, a bull and a bear researcher, a trader and a risk manager) reviews new congressional purchases. Its calls
       are traded with <strong>fake money</strong> so we can see whether they work, next to SPY and the statistical picks.
     </PageHeader>
 
-    <div v-if="locked" class="rounded-lg border border-outline-gray-2 p-6 max-w-lg space-y-3">
-      <div class="font-medium text-ink-gray-9">This page needs the password</div>
-      <p class="text-sm text-ink-gray-6">Open it as a full page load so the browser can ask for it.</p>
-      <Button href="/agents" label="Sign in" />
-    </div>
-    <ErrorState v-else-if="error" :message="error" />
+    <ErrorState v-if="error" :message="error" />
     <div v-else-if="!d" class="space-y-4" aria-busy="true">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3"><Skeleton v-for="i in 4" :key="i" class="h-24 rounded-lg" /></div>
       <Skeleton class="h-80 rounded-lg" /><Skeleton class="h-40 rounded-lg" />
@@ -141,7 +135,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { Alert, Badge, Button, Skeleton, TabButtons } from 'frappe-ui'
+import { Alert, Badge, Skeleton, TabButtons } from 'frappe-ui'
 import PageHeader from '../components/PageHeader.vue'
 import StatTile from '../components/StatTile.vue'
 import GrowthChart from '../components/GrowthChart.vue'
@@ -163,14 +157,13 @@ const SECTIONS = [
 
 const d = ref(null)
 const error = ref('')
-const locked = ref(false)
 const tab = ref('decisions')
 const acct = ref('agents')
 onMounted(async () => {
   try {
-    const r = await fetch('/picks/agents.json', { credentials: 'same-origin', cache: 'no-store' })
-    if (r.status === 401) { locked.value = true; return }
-    if (r.status === 404) { error.value = 'The agent desk has no data yet. It appears after the next daily update.'; return }
+    const r = await fetch('/picks/agents.json', { cache: 'no-store' })
+    // A host with an SPA fallback answers a missing file with index.html, not a 404.
+    if (r.status === 404 || !(r.headers.get('content-type') || '').includes('json')) { error.value = 'The agent desk has no data yet. It appears after the next daily update.'; return }
     if (!r.ok) throw new Error(`Could not load the agent desk (${r.status})`)
     d.value = await r.json()
   } catch (e) { error.value = e.message }

@@ -24,8 +24,8 @@ autocorrelation-robust). Otherwise the top-scored group is "Watch" and the
 rest "Don't buy", and the page says why. The confidence shown is the realized
 out-of-sample hit rate of the calibration quintile the score falls in.
 
-Output goes to web/public/picks/recs.json, which is git-ignored and served
-only behind the password middleware.
+Output goes to web/public/picks/recs.json, which is git-ignored (it changes
+daily) and deployed straight to the public site.
 """
 from __future__ import annotations
 
