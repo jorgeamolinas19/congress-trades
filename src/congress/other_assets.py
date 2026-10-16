@@ -43,7 +43,7 @@ _NUM = r"([\d,]*\d(?:\.\d+)?)"
 OPT_STRIKES = [re.compile(p, re.I) for p in (
     rf"strike\s*(?:price)?:?\s*(?:of\s*)?\$?\s*{_NUM}", rf"@\s*\$?\s*{_NUM}", rf"\${_NUM}",
     rf"\b(?:calls?|puts?)\s+{_NUM}\b", rf"\b{_NUM}\s+(?:calls?|puts?)\b")]
-OPT_EXPIRY = re.compile(r"(?:\bexp\w*\.?(?:\s+date)?(?:\s+of)?)\s*:?\s*(\d{1,2}/\d{1,2}/\d{2,4})", re.I)
+OPT_EXPIRY = re.compile(r"(?:\bexp\w*\.?(?:\s+date)?(?:\s+of)?)\s*:?\s*(\d{1,2}/\d{1,2}/\d{2,4}|20\d\d-\d\d-\d\d)", re.I)
 OPT_EXPIRY_MONTH = re.compile(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\.?\s+(20\d\d)\b", re.I)
 OPT_CONTRACTS = re.compile(r"\b(\d[\d,]*)\s+(?:call\s+|put\s+)?(?:option|contract)s?\b", re.I)
 
