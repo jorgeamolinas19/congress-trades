@@ -142,7 +142,11 @@ by `python -m congress.site_data`, and is hosted on Vercel.
   a trade "Buy" if the top-rated group beat SPY in that window with t >= 2 (month-clustered, Newey-West across
   months because six-month outcomes overlap). The window is frozen on purpose: re-testing the gate every day as
   data arrives would be repeated looks at one hypothesis. Right now it doesn't pass, so the best calls are
-  "Watch". The confidence shown is the realized out-of-sample hit rate of the score's calibration quintile. The picks JSON changes daily, so it is git-ignored and deployed straight to the site rather than committed.
+  "Watch". The confidence shown is the realized out-of-sample hit rate of the score's calibration quintile.
+  **Options** get their own tab: for each option a member bought, the chance it finishes in the money (lognormal,
+  from today's stock price, the strike, days left and the past year's volatility). Checked against 256 expired
+  congressional option buys: predicted 53%, realized 56%. Under 25% or under 14 days left is "Don't buy"; the rest
+  are "Watch", never "Buy", since option prices (the premium you'd pay) aren't available. The picks JSON changes daily, so it is git-ignored and deployed straight to the site rather than committed.
 
 - **Agent desk** (`/agents`): [TradingAgents](https://github.com/TauricResearch/TradingAgents)
   (analysts, a bull/bear debate, a trader and a risk manager built on LangGraph) reviews new congressional
