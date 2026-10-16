@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write   # only to push the encrypted agent-desk state to its own branch
+  contents: read    # the one write (the encrypted agent-desk state) is a separate job below
 
 jobs:
   update:
@@ -72,21 +72,20 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python -u -m congress.daily
 
-      - name: Save agent-desk state (encrypted branch)
+      - name: Encrypt the agent-desk state for the push job
         if: always()
         env:
           AGENTS_STATE_KEY: ${{ secrets.AGENTS_STATE_KEY }}
         run: |
           if [ -z "$AGENTS_STATE_KEY" ] || [ ! -f data/private/agents_state.json ]; then echo "nothing to save"; exit 0; fi
-          python -m congress.secure_state encrypt data/private/agents_state.json "$RUNNER_TEMP/state.enc"
-          blob=$(git hash-object -w "$RUNNER_TEMP/state.enc")
-          tree=$(printf '100644 blob %s\tstate.enc\n' "$blob" | git mktree)
-          parent=$(git ls-remote origin refs/heads/agents-state | cut -f1)
-          args=""
-          if [ -n "$parent" ]; then git fetch --depth=1 origin agents-state && args="-p $parent"; fi
-          commit=$(git -c user.name=daily-bot -c user.email=daily-bot@users.noreply.github.com commit-tree "$tree" $args -m "agent state $(date -u +%F)")
-          git push origin "$commit:refs/heads/agents-state"
-          echo "saved the encrypted agent-desk state"
+          python -m congress.secure_state encrypt data/private/agents_state.json state.enc
+
+      - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('state.enc') != ''
+        with:
+          name: agents-state
+          path: state.enc
+          retention-days: 3
 
       - name: Save caches
         if: always()
@@ -129,3 +128,32 @@ jobs:
       - name: Remind that deploys are off
         if: env.HAS_VERCEL_TOKEN != 'true'
         run: echo "::warning::VERCEL_TOKEN secret is not set, so the data was updated and cached but not deployed."
+
+  # Pushing to the agents-state branch is the only thing that needs write access, so
+  # it runs in its own job with no third-party code or secrets other than the token.
+  save-state:
+    needs: update
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        id: dl
+        continue-on-error: true
+        with:
+          name: agents-state
+      - name: Push the encrypted state
+        if: steps.dl.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init -q repo && cd repo
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          blob=$(git hash-object -w ../state.enc)
+          tree=$(printf '100644 blob %s\tstate.enc\n' "$blob" | git mktree)
+          args=""
+          if git fetch --depth=1 origin agents-state 2>/dev/null; then args="-p $(git rev-parse FETCH_HEAD)"; fi
+          commit=$(git -c user.name=daily-bot -c user.email=daily-bot@users.noreply.github.com commit-tree "$tree" $args -m "agent state $(date -u +%F)")
+          git push origin "$commit:refs/heads/agents-state"
+          echo "saved the encrypted agent-desk state"

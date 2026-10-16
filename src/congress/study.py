@@ -20,6 +20,7 @@ OUT = REPORTS / "results"
 OUT.mkdir(parents=True, exist_ok=True)
 MIN_NAMES = 20       # evaluation starts once both portfolios hold this many names
 HEADLINE_MODEL = "FF5+Mom"
+COST_BPS = 10        # per dollar traded (spread + impact for liquid US names); the copier pays it, members' returns don't
 
 
 def load_inputs():
@@ -27,7 +28,6 @@ def load_inputs():
     factors = load_factors()
     rets = prices.load_returns()
     rets = rets.loc[rets.index.isin(factors.index)]           # common trading calendar
-    rets = rets.where(rets < 2.0)                               # >200% one-day moves are bad ticks
     spy = rets.pop("SPY")
     return trades, factors, rets, spy
 
@@ -77,6 +77,7 @@ def robustness_specs(buys: pd.DataFrame, sells: pd.DataFrame, top5: list[str], t
         ("Dollar-weighted (low end)", "weighting", b, {"weight": "amount_low"}),
         ("Dollar-weighted (midpoint)", "weighting", b, {"weight": "amount_mid"}),
         ("Dollar-weighted (high end)", "weighting", b, {"weight": "amount_high"}),
+        ("Equal weight per member", "weighting", b, {"weight": "per_member"}),
         ("Hold 1 month", "holding", b, {"hold_days": 21}),
         ("Hold 3 months", "holding", b, {"hold_days": 63}),
         ("Hold 12 months", "holding", b, {"hold_days": 252}),
@@ -90,6 +91,8 @@ def main() -> dict:
     trades = trades[trades.symbol.isin(rets.columns)]
     buys = trades[trades.side == "buy"].copy()
     sells = trades[trades.side == "sell"].copy()
+    # The ten most active members place a third of all buys; this weight gives each member one vote.
+    buys["per_member"] = 1.0 / buys.groupby("member").member.transform("size")
     rf = factors.RF
     res: dict = {"sample": describe_sample(trades)}
 
@@ -104,15 +107,21 @@ def main() -> dict:
     series["sells_filing_date"] = sell_port.ret.loc[sl]
     series["delay_cost"] = series.trade_date - series.filing_date
     series["buys_minus_sells"] = series.filing_date - series.sells_filing_date
+    # What the investable portfolio keeps after paying to trade.
+    traded = analysis.turnover(ports["filing_date"][1].loc[sl], rets.loc[sl])
+    series["filing_date_net"] = series.filing_date - traded * COST_BPS / 1e4
+    res["costs"] = {"cost_bps_per_dollar_traded": COST_BPS, "ann_dollars_traded_per_dollar": float(traded.mean() * 252),
+                    "ann_cost_drag": float(traded.mean() * 252 * COST_BPS / 1e4)}
     series.join(pd.DataFrame({f"n_{k}": p.n_names for k, (p, _) in ports.items()})).to_csv(OUT / "daily_returns.csv")
 
-    summ = {k: metrics.summary(series[k], series.spy, rf) for k in ["trade_date", "filing_date", "spy", "sells_filing_date"]}
+    summ = {k: metrics.summary(series[k], series.spy, rf)
+            for k in ["trade_date", "filing_date", "filing_date_net", "spy", "sells_filing_date"]}
     pd.DataFrame(summ).T.to_csv(OUT / "summary_metrics.csv")
     res["summary"] = summ
 
     # ---- 2. Factor regressions --------------------------------------------
     regs = []
-    for k in ["trade_date", "filing_date", "sells_filing_date"]:
+    for k in ["trade_date", "filing_date", "filing_date_net", "sells_filing_date"]:
         for m in analysis.MODELS:
             regs.append({"portfolio": k, **analysis.factor_regression(series[k], factors, m)})
     for k in ["delay_cost", "buys_minus_sells"]:

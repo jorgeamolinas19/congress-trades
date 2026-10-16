@@ -19,6 +19,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from . import analysis
+
 PERCENTILES = (1, 5, 10, 25, 50, 75, 90, 95)
 K_MIN, K_MAX = 5.0, 5000.0
 Z80 = 1.2816
@@ -34,8 +36,7 @@ def outcome_stats(ret: pd.Series, excess: pd.Series, month: pd.Series) -> dict:
     if df.empty:
         return {"n": 0}
     hit = (df.excess > 0).astype(float)
-    by_month = hit.groupby(df.month).mean()
-    se = by_month.std(ddof=1) / np.sqrt(len(by_month)) if len(by_month) > 1 else np.nan
+    _, se = analysis.hac_mean(hit.groupby(df.month).mean())
     p = float(hit.mean())
     return {
         "n": int(len(df)), "hit_rate": p,

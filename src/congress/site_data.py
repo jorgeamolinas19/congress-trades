@@ -176,7 +176,7 @@ def main() -> None:
     prices.download(sorted(set(fund_syms)), threads=2)
     factors = load_factors()
     rf = factors.RF
-    px = pd.read_parquet(prices.PRICES_PATH).sort_index()
+    px = prices.load_prices()
     rets = px.pct_change(fill_method=None)
     rets = rets.where(rets < 2.0)
     spy = rets.pop("SPY")
@@ -311,6 +311,7 @@ def main() -> None:
             "sample": {k: v for k, v in headline["sample"].items() if k != "top_members"},
             "window": headline["window"],
             "summary": headline["summary"],
+            "costs": headline.get("costs"),
             "regressions": [r for r in headline["regressions"] if r["model"] == "FF5+Mom"],
             "event_study": headline["event_study"],
             "multiple_testing": headline["multiple_testing"],

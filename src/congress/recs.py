@@ -15,10 +15,14 @@ The model is a logistic regression on features known at the decision date:
 
 Target: did the stock beat SPY over the 6 months after entry (the day after
 disclosure). It is fitted on decisions before 2020-07 (so every training
-outcome is known before the test period) and tested on 2021 onward. A "Buy"
-is only ever issued if the top-scored group beat SPY out of sample with
-t >= 2 (month-clustered). Otherwise everything is "Don't buy", and the page
-says why.
+outcome is known before the test period) and tested on a FROZEN window,
+2021-01 to 2026-01. The window is frozen because re-testing a "t >= 2" gate
+every day as data arrives is a repeated look at the same hypothesis, which
+inflates the chance of crossing it by luck. A "Buy" is only ever issued if the
+top-scored group beat SPY in that window with t >= 2 (month-clustered,
+autocorrelation-robust). Otherwise the top-scored group is "Watch" and the
+rest "Don't buy", and the page says why. The confidence shown is the realized
+out-of-sample hit rate of the calibration quintile the score falls in.
 
 Output goes to web/public/picks/recs.json, which is git-ignored and served
 only behind the password middleware.
@@ -32,7 +36,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from . import odds, prices
+from . import analysis, odds, prices
 from .config import PROCESSED, ROOT
 
 OUT = ROOT / "web" / "public" / "picks"
@@ -40,13 +44,14 @@ HOLD = 126
 FEATURES = ["member_odds", "runup", "momentum", "log_amount", "log_delay", "crowd"]
 TRAIN_END = pd.Timestamp("2020-07-01")
 TEST_START = pd.Timestamp("2021-01-01")
+TEST_END = pd.Timestamp("2026-01-01")   # frozen; move it deliberately, never automatically
 RECENT_DAYS = 30          # disclosures from the last 30 days are actionable
-LATE_FILING_DAYS = 45     # filed after the legal deadline: historically -4.7% vs SPY
+LATE_FILING_DAYS = 45     # legal deadline; lateness itself is a model feature (log_delay)
 TOP_SHARE = 0.2           # "Buy" = scores in the training set's top 20%
 
 
 def _prices():
-    px = pd.read_parquet(prices.PRICES_PATH).sort_index()
+    px = prices.load_prices()
     return px, px["SPY"]
 
 
@@ -115,7 +120,8 @@ def add_member_odds(df: pd.DataFrame, hist: pd.DataFrame, p: float, k: float, un
 
 def _clustered(x: pd.Series, month: pd.Series) -> tuple[float, float, int]:
     m = x.groupby(month).mean().dropna()
-    return float(m.mean()), float(m.mean() / (m.std(ddof=1) / np.sqrt(len(m)))), int(len(m))
+    mu, se = analysis.hac_mean(m)
+    return mu, mu / se, int(len(m))
 
 
 def _auc(score: np.ndarray, y: np.ndarray) -> float:
@@ -134,7 +140,7 @@ def fit(X: pd.DataFrame, y: pd.Series):
 def backtest(data: pd.DataFrame) -> dict:
     """Fit before TRAIN_END, test from TEST_START; report what a 'Buy' rule did."""
     train = data[(data.entry_date < TRAIN_END) & data.excess_6m.notna()]
-    test = data[(data.entry_date >= TEST_START) & data.excess_6m.notna()]
+    test = data[(data.entry_date >= TEST_START) & (data.entry_date < TEST_END) & data.excess_6m.notna()]
     model, predict = fit(train[FEATURES], train.excess_6m > 0)
     cut = float(np.quantile(predict(train), 1 - TOP_SHARE))
     p_test = predict(test)
@@ -149,7 +155,7 @@ def backtest(data: pd.DataFrame) -> dict:
               "mean_excess_6m": float(test.excess_6m[q == i].mean()), "n": int((q == i).sum())} for i in sorted(set(q))]
     report = {
         "train": {"n": int(len(train)), "end": str(TRAIN_END.date())},
-        "test": {"n": int(len(test)), "start": str(TEST_START.date()), "months": months},
+        "test": {"n": int(len(test)), "start": str(TEST_START.date()), "end": str(TEST_END.date()), "months": months},
         "coefficients": {k: {"coef": float(v), "t": float(model.tvalues[k])} for k, v in model.params.items()},
         "auc_test": _auc(p_test.to_numpy(), (test.excess_6m > 0).to_numpy()),
         "buy_threshold": cut,
@@ -285,8 +291,8 @@ def build(asof: pd.Timestamp | None = None, news: bool = True) -> dict:
             news_cache[sym] = fetch_news(sym, asof - pd.Timedelta(days=30), long_name=long_name.get(sym))
         return news_cache[sym]
 
-    sells_note = ("Stocks members sold went on to trail SPY by about 2.6% a year in this study, "
-                  "though that gap disappears after adjusting for risk factors.")
+    sells_note = ("Stocks members sold went on to perform about like the ones they bought in this study: "
+                  "no sign of informed selling, so a sale says little about the stock.")
     rows = []
 
     def row(r, asset_class, **extra):
@@ -310,8 +316,7 @@ def build(asof: pd.Timestamp | None = None, news: bool = True) -> dict:
             row(r, "Stock", rec="not_rated", reasons=["No current price data for this ticker."], news=nws)
             continue
         q = rb.loc[idx]
-        grp = bt["buy_group"] if q.p >= cut else bt["rest"]
-        hit, exp_ex = grp["hit_rate"], grp["mean_excess_6m"]
+        hit, exp_ex = _calibrated(float(q.p), calib)
         reasons = [
             f"Member's track record, adjusted for luck: {q.member_odds:.0%} of copied buys beat SPY.",
             f"Since they traded, the stock is {q.runup:+.1%} vs SPY (past run-ups did not hurt; momentum helped slightly).",
@@ -320,11 +325,12 @@ def build(asof: pd.Timestamp | None = None, news: bool = True) -> dict:
              else "No other members disclosed buying it in the last 30 days."),
         ]
         if r.delay_days > LATE_FILING_DAYS:
+            reasons.insert(0, f"Filed {int(r.delay_days)} days after the trade, past the 45-day deadline (already in the score).")
+        if takeover:
+            # Not part of the backtest (no headline history): a rule of thumb, labelled as such.
             rec = "dont_buy"
-            reasons.insert(0, f"Filed {int(r.delay_days)} days after the trade. Late filings trailed SPY by 4.7% over 6 months.")
-        elif takeover:
-            rec = "dont_buy"
-            reasons.insert(0, "Recent takeover or merger headline: the price is likely pinned to the deal.")
+            reasons.insert(0, "Recent takeover or merger headline: the price is likely pinned to the deal. "
+                              "Rule of thumb, not something the backtest could test.")
         elif q.p >= cut:
             rec = "buy" if bt["validated"] else "watch"
         else:

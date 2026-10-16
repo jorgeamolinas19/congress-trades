@@ -35,11 +35,13 @@
     <section>
       <h2 class="text-xl font-semibold text-ink-gray-9">The headline numbers</h2>
       <p class="mt-1 text-sm text-ink-gray-5">Every disclosed purchase held six months, equal-weighted, {{ s.study.window.start.slice(0, 4) }}–{{ s.study.window.end.slice(0, 4) }}. Alpha is what's left after the Fama-French 5 + momentum factors.</p>
-      <div class="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="mt-3 grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatTile label="Copying at disclosure" :value="`${pct(filing.ann_return)} / yr`"
           :sub="`Alpha ${signedPct(filingReg.alpha_ann)} (t = ${tstat(filingReg.alpha_t)}): not distinguishable from zero`" />
         <StatTile label="Members' own timing" :value="`${pct(trade.ann_return)} / yr`"
           :sub="`Alpha ${signedPct(tradeReg.alpha_ann)} (t = ${tstat(tradeReg.alpha_t)}): no edge even before disclosure`" />
+        <StatTile v-if="net" label="Copying, after trading costs" :value="`${pct(net.ann_return)} / yr`"
+          :sub="`${s.study.costs.cost_bps_per_dollar_traded} bps per dollar traded, ${s.study.costs.ann_dollars_traded_per_dollar.toFixed(1)}x turnover a year`" />
         <StatTile label="S&P 500 (SPY)" :value="`${pct(spy.ann_return)} / yr`" sub="The benchmark over the same days" />
         <StatTile label="Median disclosure delay" :value="`${s.study.sample.median_delay_days} days`"
           :sub="`${pct(s.study.sample.pct_filed_late_over_45d, 0)} filed after the 45-day deadline`" />
@@ -140,6 +142,7 @@ const ctas = [
 ]
 const trade = computed(() => s.value.study.summary.trade_date)
 const filing = computed(() => s.value.study.summary.filing_date)
+const net = computed(() => s.value.study.summary.filing_date_net)
 const spy = computed(() => s.value.study.summary.spy)
 const reg = (p) => s.value.study.regressions.find((r) => r.portfolio === p)
 const tradeReg = computed(() => reg('trade_date'))
