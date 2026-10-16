@@ -10,13 +10,20 @@ ROOT = pathlib.Path(__file__).resolve().parents[1] / "web"
 SKIP = {"node_modules", ".vercel", "dist", ".git"}
 
 
-def call(method, url, data=None, headers=None):
+def call(method, url, data=None, headers=None, attempts=5):
+    """One API request, retried on dropped connections and 429/5xx (one of ~400 uploads failing is routine)."""
     req = urllib.request.Request(url, data=data, method=method, headers={"Authorization": f"Bearer {TOKEN}", **(headers or {})})
-    try:
-        with urllib.request.urlopen(req) as r:
-            return r.status, r.read()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read()
+    for i in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            if e.code != 429 and e.code < 500 or i == attempts - 1:
+                return e.code, e.read()
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            if i == attempts - 1:
+                raise
+        time.sleep(2 ** i)
 
 
 entries = []
