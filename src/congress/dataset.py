@@ -55,6 +55,9 @@ def build() -> pd.DataFrame:
     keep(df.symbol.map(meta.instrument_type).eq("EQUITY"), "drop ETFs, funds and other non-equity per yfinance")
     first = pd.to_datetime(df.symbol.map(meta["first"]))
     keep(first <= df.tx_date, "drop tickers with no price history on the trade date")
+    px = pd.read_parquet(prices.PRICES_PATH)
+    broken = px.columns[(px <= 0).any()]   # negative adjusted closes: Yahoo's dividend adjustment failed
+    keep(~df.symbol.isin(broken), "drop tickers whose yfinance history is corrupt (non-positive prices)")
     # Hand-verified renames ("Square" -> "Block, Inc.") are exempt from the name check.
     ok = [t in prices.RENAMES or name_overlap(a, b)
           for t, a, b in zip(df.ticker, df.asset_name, df.symbol.map(meta.long_name))]

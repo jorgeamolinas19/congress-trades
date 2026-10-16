@@ -320,7 +320,7 @@ def analyze(row: dict, data_date, account: dict | None, max_usd: float = MAX_RUN
 
 # ---- accounts and export -------------------------------------------------------------
 def load_closes() -> pd.DataFrame:
-    return pd.read_parquet(prices.PRICES_PATH).sort_index()
+    return prices.load_prices()
 
 
 def _agent_decisions(state: dict) -> list[dict]:

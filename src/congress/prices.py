@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
 import pandas as pd
 import yfinance as yf
 
@@ -150,10 +151,29 @@ def download(symbols: list[str], start: str = "2013-01-01", end: str | None = No
     return cached.sort_index()
 
 
-def load_returns() -> pd.DataFrame:
-    """Daily simple returns, one column per yfinance symbol."""
+MIN_PRICE = 0.05   # below this a one-tick move is a double-digit "return": unmeasurable, and uninvestable
+
+
+def load_prices() -> pd.DataFrame:
+    """Adjusted closes with unusable prices blanked: non-positive (broken
+    dividend adjustment on some OTC ADRs) and sub-tick-size pennies."""
     px = pd.read_parquet(PRICES_PATH).sort_index()
-    return px.pct_change(fill_method=None)
+    return px.where(px >= MIN_PRICE)
+
+
+def load_returns() -> pd.DataFrame:
+    """Daily simple returns, one column per yfinance symbol, with bad ticks removed.
+
+    Yahoo's history has two kinds of bad day: a spike that fully reverses the
+    next day (a mis-keyed print; both days are blanked) and a one-day break of
+    10x or more with no reversal (a stitched series across a reorganisation).
+    Real crashes (a failed trial, -80%) are neither and are kept.
+    """
+    r = load_prices().pct_change(fill_method=None)
+    g = np.log1p(r)
+    revert = (g.abs() > np.log(3)) & ((g + g.shift(-1)).abs() < np.log(1.4))
+    bad = revert | revert.shift(1, fill_value=False) | (g.abs() > np.log(10))
+    return r.mask(bad)
 
 
 def load_meta() -> pd.DataFrame:

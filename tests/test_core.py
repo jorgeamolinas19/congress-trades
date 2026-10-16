@@ -261,3 +261,59 @@ def test_member_odds_use_only_outcomes_known_before_the_decision():
     assert o.iloc[0] == pytest.approx(0.5)                   # nothing known yet -> prior
     assert o.iloc[1] == pytest.approx((2 * 1 + 10 * 0.5) / 12)  # two outcomes known
     assert o.iloc[2] == pytest.approx((3 * 1 + 10 * 0.5) / 13)  # all three known
+
+
+def test_hac_mean_widens_se_for_overlapping_windows():
+    # Monthly means of a 6-month outcome overlap 5/6 with their neighbours, so
+    # they are strongly autocorrelated; a plain SE across months is too small.
+    rng = np.random.default_rng(0)
+    noise = rng.normal(size=400)
+    overlapping = pd.Series(np.convolve(noise, np.ones(6), "valid"))
+    mu, se = analysis.hac_mean(overlapping)
+    naive = overlapping.std(ddof=1) / np.sqrt(len(overlapping))
+    assert mu == pytest.approx(overlapping.mean())
+    assert se > 1.5 * naive
+    iid = pd.Series(noise)
+    _, se_iid = analysis.hac_mean(iid)
+    assert se_iid == pytest.approx(iid.std(ddof=1) / np.sqrt(len(iid)), rel=0.25)
+
+
+def test_delay_car_voids_events_with_a_missing_day():
+    cal = pd.bdate_range("2020-01-01", periods=10)
+    ar = pd.DataFrame({"X": np.arange(10) / 100.0, "Y": np.arange(10) / 100.0}, index=cal)
+    ar.loc[cal[4], "Y"] = np.nan                      # a halt inside Y's window
+    ev = pd.DataFrame({"symbol": ["X", "Y"], "tx_date": [cal[2]] * 2, "filing_date": [cal[5]] * 2})
+    out = analysis.delay_car(ev, ar)
+    assert out.iloc[0] == pytest.approx((3 + 4 + 5 + 6) / 100)
+    assert np.isnan(out.iloc[1])
+
+
+def test_turnover_counts_only_rebalancing_trades():
+    cal = pd.bdate_range("2020-01-01", periods=4)
+    rets = pd.DataFrame({"A": [0.0, 0.1, 0.0, 0.0], "B": [0.0, 0.0, 0.0, 0.0]}, index=cal)
+    # Day 0: buy A. Day 1: still only A (drift is irrelevant with one name). Day 2: swap all of A for B.
+    W = pd.DataFrame({"A": [1.0, 1.0, 0.0, 0.0], "B": [0.0, 0.0, 1.0, 1.0]}, index=cal)
+    t = analysis.turnover(W, rets)
+    assert list(t.round(9)) == [1.0, 0.0, 2.0, 0.0]
+    # Two names, equal target: a 10% move in A drifts it to 0.55/0.45, so rebalancing trades 0.10.
+    W2 = pd.DataFrame({"A": [1.0, 1.0], "B": [1.0, 1.0]}, index=cal[:2])
+    r2 = pd.DataFrame({"A": [0.1, 0.0], "B": [0.0, 0.0]}, index=cal[:2])
+    assert analysis.turnover(W2, r2).iloc[1] == pytest.approx(abs(0.5 - 0.55 / 1.05) + abs(0.5 - 0.5 / 1.05))
+
+
+def test_load_returns_removes_bad_ticks_but_keeps_real_crashes(tmp_path, monkeypatch):
+    from congress import prices
+    cal = pd.bdate_range("2020-01-01", periods=6)
+    px = pd.DataFrame({
+        "TICK": [10, 10, 40, 10, 10, 10],        # spike that reverses: a bad print
+        "CRASH": [10, 10, 2, 2.1, 2, 2],         # -80% with no reversal: a failed trial, real
+        "STITCH": [0.5, 0.5, 20, 21, 20, 20],    # 40x break, no reversal: two series glued together
+        "PENNY": [1, 0.5, 0.01, 0.02, 0.01, 0.02],  # sub-tick prices: unmeasurable
+    }, index=cal, dtype=float)
+    px.to_parquet(tmp_path / "px.parquet")
+    monkeypatch.setattr(prices, "PRICES_PATH", tmp_path / "px.parquet")
+    r = prices.load_returns()
+    assert np.isnan(r.TICK.iloc[2]) and np.isnan(r.TICK.iloc[3]) and r.TICK.iloc[4] == 0
+    assert r.CRASH.iloc[2] == pytest.approx(-0.8)
+    assert np.isnan(r.STITCH.iloc[2]) and r.STITCH.iloc[3] == pytest.approx(0.05)
+    assert r.PENNY.iloc[1] == pytest.approx(-0.5) and r.PENNY.iloc[2:].isna().all()

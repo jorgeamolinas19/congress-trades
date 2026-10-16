@@ -80,18 +80,33 @@ def car(paths: pd.DataFrame, start: int, end: int) -> pd.Series:
     return win.sum(axis=1, min_count=1).where(win.notna().all(axis=1))
 
 
+def hac_mean(m: pd.Series, lags: int = 5) -> tuple[float, float]:
+    """Mean of a monthly series with a Newey-West standard error.
+
+    A six-month outcome window overlaps the next five months' windows, so
+    neighbouring monthly means are correlated and a plain SE across months
+    overstates precision. `lags` = holding period in months minus one.
+    """
+    m = m.dropna().to_numpy(float)
+    if len(m) < 2:
+        return (float(m[0]) if len(m) else np.nan), np.nan
+    fit = sm.OLS(m, np.ones(len(m))).fit(cov_type="HAC", cov_kwds={"maxlags": min(lags, len(m) - 1)})
+    return float(fit.params[0]), float(fit.bse[0])
+
+
 def clustered_mean(x: pd.Series, clusters: pd.Series) -> dict:
     """Mean with a t-stat that treats each calendar month as one observation.
 
     Events in the same month share market shocks, so the naive cross-sectional
-    t-stat overstates precision. Averaging within month, then across months,
-    is a conservative fix (Fama-MacBeth style).
+    t-stat overstates precision. Averaging within month, then across months
+    with an autocorrelation-robust SE (overlapping windows), is a conservative
+    fix (Fama-MacBeth style).
     """
     df = pd.DataFrame({"x": x, "c": clusters}).dropna()
     m = df.groupby("c").x.mean()
-    se = m.std(ddof=1) / np.sqrt(len(m))
-    return {"mean": float(df.x.mean()), "month_mean": float(m.mean()),
-            "t_clustered": float(m.mean() / se), "n_events": int(len(df)), "n_months": int(len(m))}
+    mu, se = hac_mean(m)
+    return {"mean": float(df.x.mean()), "month_mean": mu,
+            "t_clustered": float(mu / se), "n_events": int(len(df)), "n_months": int(len(m))}
 
 
 def delay_car(events: pd.DataFrame, ar: pd.DataFrame) -> pd.Series:
@@ -103,9 +118,12 @@ def delay_car(events: pd.DataFrame, ar: pd.DataFrame) -> pd.Series:
     t0 = cal.searchsorted(events.tx_date.values, side="left")
     t1 = cal.searchsorted(events.filing_date.values, side="left") + 1
     cs = np.vstack([np.zeros(arr.shape[1]), np.nancumsum(np.nan_to_num(arr), axis=0)])
+    gaps = np.vstack([np.zeros(arr.shape[1]), np.cumsum(np.isnan(arr), axis=0)])
     valid = (t1 < len(cal)) & (t1 > t0)
     out = np.full(len(events), np.nan)
     out[valid] = cs[t1[valid] + 1, col[valid]] - cs[t0[valid] + 1, col[valid]]
+    # Same rule as car(): a missing day in the window voids the event rather than counting as 0.
+    out[valid & (gaps[np.minimum(t1 + 1, len(cal)), col] - gaps[np.minimum(t0 + 1, len(cal)), col] > 0)] = np.nan
     return pd.Series(out, index=events.index)
 
 
@@ -124,6 +142,21 @@ def concentration(W: pd.DataFrame, returns: pd.DataFrame, top: int = 10) -> dict
         "contribution": contrib.sort_values(ascending=False),
         "avg_weight": w.mean().sort_values(ascending=False),
     }
+
+
+def turnover(W: pd.DataFrame, returns: pd.DataFrame) -> pd.Series:
+    """Dollars traded per dollar of portfolio each day (buys plus sells).
+
+    Target weights are W normalised over the names that have a return that
+    day, as in portfolio_returns. Yesterday's holdings drift with yesterday's
+    returns; whatever rebalancing back to today's target moves is traded.
+    """
+    r = returns.reindex_like(W)
+    live = W.where(r.notna(), 0.0)
+    w = live.div(live.sum(axis=1).replace(0, np.nan), axis=0).fillna(0.0)
+    drift = (w * (1 + r.fillna(0.0))).shift(1)
+    drift = drift.div(drift.sum(axis=1).replace(0, np.nan), axis=0).fillna(0.0)
+    return (w - drift).abs().sum(axis=1)
 
 
 # --------------------------------------------------------------------------- #
