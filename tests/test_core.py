@@ -173,6 +173,7 @@ def test_non_stock_filter(name, is_stock):
 
 @pytest.mark.parametrize("text, kind, strike, expiry", [
     ("SPDR S&P 500 ETF Option Type: Put Strike price: $210.00 Expires: 06/30/2017", "Put", 210.0, "06/30/2017"),
+    ("Williams Companies Common Stock Option Type: Call Strike price: $75.00 Expires: 2026-08-21", "Call", 75.0, "2026-08-21"),
     ("Purchase of 50 call options with a strike price of $22 and an expiration date of 1/15/16", "Call", 22.0, "1/15/16"),
     ("CALL ISHARES RUSSELL 2000 $175 EXP 09/19/25", "Call", 175.0, "09/19/25"),
     ("Call Option, $180, Exp. 4/5/19", "Call", 180.0, "4/5/19"),
