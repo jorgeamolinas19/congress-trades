@@ -40,7 +40,7 @@
           :sub="`Alpha ${signedPct(filingReg.alpha_ann)} (t = ${tstat(filingReg.alpha_t)}): not distinguishable from zero`" />
         <StatTile label="Members' own timing" :value="`${pct(trade.ann_return)} / yr`"
           :sub="`Alpha ${signedPct(tradeReg.alpha_ann)} (t = ${tstat(tradeReg.alpha_t)}): no edge even before disclosure`" />
-        <StatTile v-if="net" label="Copying, after trading costs" :value="`${pct(net.ann_return)} / yr`"
+        <StatTile v-if="net" label="After trading costs" :value="`${pct(net.ann_return)} / yr`"
           :sub="`${s.study.costs.cost_bps_per_dollar_traded} bps per dollar traded, ${s.study.costs.ann_dollars_traded_per_dollar.toFixed(1)}x turnover a year`" />
         <StatTile label="S&P 500 (SPY)" :value="`${pct(spy.ann_return)} / yr`" sub="The benchmark over the same days" />
         <StatTile label="Median disclosure delay" :value="`${s.study.sample.median_delay_days} days`"
